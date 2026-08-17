@@ -31,11 +31,7 @@ public class CobbleForgeMod {
         CREATIVE_MODE_TABS.register(modEventBus);
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
-        NeoForge.EVENT_BUS.register(this);
-
         modEventBus.addListener(this::commonSetup);
-
-        NeoForge.EVENT_BUS.register(this);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

@@ -41,10 +41,11 @@ public class ResearchPointHooks {
         }
 
         ResourceLocation speciesId = event.getRecord().getSpeciesDexRecord().getId();
-        ServerPlayer player = ServerLifecycleHooks.getCurrentServer()
-                .getPlayerList()
-                .getPlayer(event.getPlayerUUID());
-
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) {
+            return Unit.INSTANCE;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(event.getPlayerUUID());
         if (player == null) {
             return Unit.INSTANCE; // defensive: shouldn't normally happen, event fires for an online player
         }

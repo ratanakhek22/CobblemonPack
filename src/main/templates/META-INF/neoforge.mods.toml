@@ -21,9 +21,6 @@ license="${mod_license}"
 [[mods]]
 modId="cobbleforge"
 
-# The modid of the mod
-modId="${mod_id}" #mandatory
-
 # The version number of the mod
 version="${mod_version}" #mandatory
 
