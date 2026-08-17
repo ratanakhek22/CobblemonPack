@@ -1,0 +1,5 @@
+{
+  "variants": {
+    "": { "model": "cobbleforge:block/ruin_block" }
+  }
+}
