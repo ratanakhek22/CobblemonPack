@@ -7,7 +7,6 @@ import java.util.List;
 public record ResearchNodeDefinition(
         ResourceLocation speciesId,
         List<NodeStage> stages,      // ordered; e.g. [SILHOUETTE, FULL_REVEAL] for bespoke
-        List<Integer> stageWeights,  // same size as stages; relative share of totalCost
         int totalCost,               // constant across all legendaries per your design doc
         boolean bespoke
 ) {
@@ -17,8 +16,10 @@ public record ResearchNodeDefinition(
         if (index < 0) {
             throw new IllegalArgumentException("Stage " + stage + " not defined for " + speciesId);
         }
-        int totalWeight = stageWeights.stream().mapToInt(Integer::intValue).sum();
-        return Math.round(totalCost * (stageWeights.get(index) / (float) totalWeight));
+        int stepCount = stages.size();
+        int base = totalCost / stepCount;
+        int remainder = totalCost % stepCount;
+        return (index == stepCount - 1) ? base + remainder : base;
     }
 
     public NodeStage firstStage() {

@@ -27,20 +27,18 @@ public class ModResearchNodes {
     private static void registerShared(String speciesId) {
         register(speciesId,
                 List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL, NodeStage.SACRIFICE_INFO),
-                List.of(20, 30, 50), // weights must match stage count and order
                 false);
     }
 
     private static void registerBespoke(String speciesId) {
         register(speciesId,
                 List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL),
-                List.of(40, 60),
                 true);
     }
 
-    private static void register(String speciesId, List<NodeStage> stages, List<Integer> weights, boolean bespoke) {
+    private static void register(String speciesId, List<NodeStage> stages, boolean bespoke) {
         ResourceLocation id = ResourceLocation.parse(speciesId);
-        NODES.put(id, new ResearchNodeDefinition(id, stages, weights, TOTAL_COST, bespoke));
+        NODES.put(id, new ResearchNodeDefinition(id, stages, TOTAL_COST, bespoke));
     }
 
     public static ResearchNodeDefinition get(ResourceLocation speciesId) {
