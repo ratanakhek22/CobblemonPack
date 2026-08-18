@@ -3,7 +3,6 @@ package com.ratana.cobbleforge.research.node;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Vector2f;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

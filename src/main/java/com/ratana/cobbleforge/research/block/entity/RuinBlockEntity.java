@@ -9,6 +9,7 @@ import net.minecraft.nbt.NbtUtils;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -31,7 +32,7 @@ public class RuinBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+    protected void saveAdditional(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         ListTag list = new ListTag();
         for (UUID id : claimedBy) {
@@ -41,12 +42,12 @@ public class RuinBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+    protected void loadAdditional(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         claimedBy.clear();
         ListTag list = tag.getList("ClaimedBy", Tag.TAG_INT_ARRAY);
-        for (int i = 0; i < list.size(); i++) {
-            claimedBy.add(NbtUtils.loadUUID(list.get(i)));
+        for (Tag value : list) {
+            claimedBy.add(NbtUtils.loadUUID(value));
         }
     }
 }

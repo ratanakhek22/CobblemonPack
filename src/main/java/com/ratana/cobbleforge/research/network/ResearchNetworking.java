@@ -18,7 +18,6 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @EventBusSubscriber(modid = "cobbleforge")
 public final class ResearchNetworking {

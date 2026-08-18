@@ -17,6 +17,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class ResearchTableBlock extends Block {
@@ -26,8 +27,8 @@ public class ResearchTableBlock extends Block {
     }
 
     @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
-                                               Player player, BlockHitResult hitResult) {
+    protected @NotNull InteractionResult useWithoutItem(@NotNull BlockState state, Level level, @NotNull BlockPos pos,
+                                                        @NotNull Player player, @NotNull BlockHitResult hitResult) {
         if (level.isClientSide) {
             return InteractionResult.SUCCESS;
         }
@@ -35,13 +36,12 @@ public class ResearchTableBlock extends Block {
         if (player instanceof ServerPlayer serverPlayer) {
             serverPlayer.openMenu(new MenuProvider() {
                 @Override
-                public Component getDisplayName() {
+                public @NotNull Component getDisplayName() {
                     return Component.translatable("container.cobbleforge.research_table");
                 }
 
-                @Nullable
                 @Override
-                public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player p) {
+                public AbstractContainerMenu createMenu(int containerId, @NotNull Inventory inventory, @NotNull Player p) {
                     return new ModResearchMenu(containerId, inventory, ContainerLevelAccess.create(level, pos));
                 }
             });

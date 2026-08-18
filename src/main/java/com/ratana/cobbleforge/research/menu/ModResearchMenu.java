@@ -11,6 +11,7 @@ import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -27,7 +28,7 @@ public class ModResearchMenu extends AbstractContainerMenu {
     private final ContainerLevelAccess access;
     private final SimpleContainer inputContainer = new SimpleContainer(INPUT_SLOT_COUNT) {
         @Override
-        public boolean canPlaceItem(int slot, ItemStack stack) {
+        public boolean canPlaceItem(int slot, @NotNull ItemStack stack) {
             return switch (slot) {
                 case SLOT_ANCIENT_ITEM -> isAncientItem(stack);
                 case SLOT_BRUSH -> stack.is(Items.BRUSH);
@@ -54,9 +55,24 @@ public class ModResearchMenu extends AbstractContainerMenu {
         this.player = playerInventory.player;
         this.access = access;
 
-        addSlot(new Slot(inputContainer, SLOT_ANCIENT_ITEM, 12, 92));
-        addSlot(new Slot(inputContainer, SLOT_BRUSH, 12, 120));
-        addSlot(new Slot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 152, 92));
+        this.addSlot(new Slot(inputContainer, SLOT_ANCIENT_ITEM, 12, 92) {
+            @Override
+            public boolean mayPlace(@NotNull ItemStack stack) {
+                return inputContainer.canPlaceItem(SLOT_ANCIENT_ITEM, stack);
+            }
+        });
+        this.addSlot(new Slot(inputContainer, SLOT_BRUSH, 12, 120) {
+            @Override
+            public boolean mayPlace(@NotNull ItemStack stack) {
+                return inputContainer.canPlaceItem(SLOT_BRUSH, stack);
+            }
+        });
+        this.addSlot(new Slot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 152, 92) {
+            @Override
+            public boolean mayPlace(@NotNull ItemStack stack) {
+                return inputContainer.canPlaceItem(SLOT_FORGOTTEN_KNOWLEDGE, stack);
+            }
+        });
 
         layoutPlayerInventorySlots(playerInventory, 8, 160);
     }
@@ -109,9 +125,9 @@ public class ModResearchMenu extends AbstractContainerMenu {
     // ---------------- vanilla container plumbing ----------------
 
     @Override
-    public ItemStack quickMoveStack(Player player, int index) {
+    public @NotNull ItemStack quickMoveStack(@NotNull Player player, int index) {
         Slot slot = slots.get(index);
-        if (slot == null || !slot.hasItem()) return ItemStack.EMPTY;
+        if (!slot.hasItem()) return ItemStack.EMPTY;
 
         ItemStack original = slot.getItem();
         ItemStack copy = original.copy();
@@ -119,7 +135,33 @@ public class ModResearchMenu extends AbstractContainerMenu {
         if (index < INPUT_SLOT_COUNT) {
             if (!moveItemStackTo(original, INPUT_SLOT_COUNT, slots.size(), true)) return ItemStack.EMPTY;
         } else {
-            if (!moveItemStackTo(original, 0, INPUT_SLOT_COUNT, false)) return ItemStack.EMPTY;
+            // Moving FROM the player TO your machine
+            boolean movedToTable = false;
+
+            if (isAncientItem(copy)) {
+                movedToTable = moveItemStackTo(original, SLOT_ANCIENT_ITEM, SLOT_ANCIENT_ITEM + 1, false);
+            } else if (copy.is(Items.BRUSH)) {
+                movedToTable = moveItemStackTo(original, SLOT_BRUSH, SLOT_BRUSH + 1, false);
+            } else if (isForgottenKnowledge(copy)) {
+                movedToTable = moveItemStackTo(original, SLOT_FORGOTTEN_KNOWLEDGE, SLOT_FORGOTTEN_KNOWLEDGE + 1, false);
+            }
+
+            // If it didn't go into the machine (either wasn't valid, or the machine slot was full),
+            // handle standard hotbar <-> inventory shift-clicking.
+            if (!movedToTable) {
+                int hotbarStart = INPUT_SLOT_COUNT + 27;       // Index 30
+                int hotbarEnd = INPUT_SLOT_COUNT + 36;         // Index 39
+
+                if (index < hotbarStart) {
+                    // Clicked in main inventory -> move to hotbar
+                    if (!moveItemStackTo(original, hotbarStart, hotbarEnd, false)) return ItemStack.EMPTY;
+                } else if (index < hotbarEnd) {
+                    // Clicked in hotbar -> move to main inventory
+                    if (!moveItemStackTo(original, INPUT_SLOT_COUNT, hotbarStart, false)) return ItemStack.EMPTY;
+                } else {
+                    return ItemStack.EMPTY;
+                }
+            }
         }
 
         if (original.isEmpty()) {
@@ -131,7 +173,7 @@ public class ModResearchMenu extends AbstractContainerMenu {
     }
 
     @Override
-    public boolean stillValid(Player player) {
+    public boolean stillValid(@NotNull Player player) {
         return stillValid(access, player, ModBlocks.RESEARCH_TABLE.get());
     }
 }
