@@ -4,9 +4,13 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 public class ResearchPlayerData {
@@ -15,34 +19,59 @@ public class ResearchPlayerData {
             Codec.unboundedMap(ResourceLocation.CODEC, Codec.STRING)
                     .fieldOf("node_progress").forGetter(ResearchPlayerData::serializeProgress),
             ResourceLocation.CODEC.listOf().fieldOf("dex_awarded")
-                    .forGetter(data -> new java.util.ArrayList<>(data.dexAwarded)),
+                    .forGetter(data -> new ArrayList<>(data.dexAwarded)),
             ResourceLocation.CODEC.listOf().fieldOf("capture_awarded")
-                    .forGetter(data -> new java.util.ArrayList<>(data.captureAwarded))
+                    .forGetter(data -> new ArrayList<>(data.captureAwarded)),
+            Codec.unboundedMap(ResourceLocation.CODEC, Codec.INT)
+                    .fieldOf("node_tiebreak").forGetter(data -> new HashMap<>(data.nodeTiebreak)),
+            Codec.unboundedMap(ResourceLocation.CODEC, Codec.INT)
+                    .fieldOf("points_invested").forGetter(data -> new HashMap<>(data.pointsInvested))
     ).apply(instance, ResearchPlayerData::fromCodec));
 
     private int points;
     private final Map<ResourceLocation, NodeProgress> progress;
     private final Set<ResourceLocation> dexAwarded;
     private final Set<ResourceLocation> captureAwarded;
+    /**
+     * Stable per-node random tiebreaker, assigned once on first encounter and never
+     * changed after. Slot order is NOT stored directly — it's recomputed live by
+     * sorting nodes on (progress descending, tiebreak ascending), so a node's ring
+     * position is always a function of current progress, with the tiebreak only
+     * separating nodes that are tied on progress (most commonly: everything still
+     * untouched). This means a freshly added legendary — starting at zero progress,
+     * same as any node this player just hasn't gotten to yet — is indistinguishable
+     * from an old, ignored node. Nothing about position reveals *when* a node was
+     * added, only how far the player has personally pushed it.
+     */
+    private final Map<ResourceLocation, Integer> nodeTiebreak;
+    /** Cumulative points this player has spent unlocking each individual node so far. */
+    private final Map<ResourceLocation, Integer> pointsInvested;
 
     public ResearchPlayerData() {
-        this(0, new HashMap<>(), new HashSet<>(), new HashSet<>());
+        this(0, new HashMap<>(), new HashSet<>(), new HashSet<>(), new HashMap<>(), new HashMap<>());
     }
 
     private ResearchPlayerData(int points, Map<ResourceLocation, NodeProgress> progress,
-                               Set<ResourceLocation> dexAwarded, Set<ResourceLocation> captureAwarded) {
+                               Set<ResourceLocation> dexAwarded, Set<ResourceLocation> captureAwarded,
+                               Map<ResourceLocation, Integer> nodeTiebreak,
+                               Map<ResourceLocation, Integer> pointsInvested) {
         this.points = points;
         this.progress = new HashMap<>(progress);
         this.dexAwarded = new HashSet<>(dexAwarded);
         this.captureAwarded = new HashSet<>(captureAwarded);
+        this.nodeTiebreak = new HashMap<>(nodeTiebreak);
+        this.pointsInvested = new HashMap<>(pointsInvested);
     }
 
     private static ResearchPlayerData fromCodec(int points, Map<ResourceLocation, String> rawProgress,
-                                                java.util.List<ResourceLocation> dexAwardedList,
-                                                java.util.List<ResourceLocation> captureAwardedList) {
+                                                List<ResourceLocation> dexAwardedList,
+                                                List<ResourceLocation> captureAwardedList,
+                                                Map<ResourceLocation, Integer> nodeTiebreakMap,
+                                                Map<ResourceLocation, Integer> pointsInvestedMap) {
         Map<ResourceLocation, NodeProgress> progress = new HashMap<>();
         rawProgress.forEach((id, name) -> progress.put(id, NodeProgress.valueOf(name)));
-        return new ResearchPlayerData(points, progress, new HashSet<>(dexAwardedList), new HashSet<>(captureAwardedList));
+        return new ResearchPlayerData(points, progress, new HashSet<>(dexAwardedList),
+                new HashSet<>(captureAwardedList), nodeTiebreakMap, pointsInvestedMap);
     }
 
     private Map<ResourceLocation, String> serializeProgress() {
@@ -77,6 +106,45 @@ public class ResearchPlayerData {
         if (points < cost) return false;
         points -= cost;
         progress.put(speciesId, target);
+        pointsInvested.merge(speciesId, cost, Integer::sum);
         return true;
+    }
+
+    /** Total points this player has sunk into a given node so far (0 if untouched). */
+    public int getPointsInvested(ResourceLocation speciesId) {
+        return pointsInvested.getOrDefault(speciesId, 0);
+    }
+
+    /**
+     * Computes this player's current slot order across all registered nodes. A node's
+     * position in the returned list IS its flat slot index (feed straight into
+     * NodeSlotLayout.screenPosition). Recomputed on every call — cheap at this scale
+     * (tens of nodes) — so progress changes are reflected immediately without needing
+     * to persist or update a separate ordering. Any node in {@code allNodeIds} that
+     * this player hasn't encountered before gets a random tiebreaker assigned and
+     * persisted on the spot.
+     */
+    public List<ResourceLocation> computeSlotOrder(Iterable<ResourceLocation> allNodeIds, Random random) {
+        List<ResourceLocation> ids = new ArrayList<>();
+        allNodeIds.forEach(ids::add);
+
+        for (ResourceLocation id : ids) {
+            nodeTiebreak.computeIfAbsent(id, key -> random.nextInt());
+        }
+
+        ids.sort(Comparator
+                .comparingInt((ResourceLocation id) -> getPointsInvested(id))
+                .reversed()
+                .thenComparingInt(nodeTiebreak::get));
+
+        return ids;
+    }
+
+    public Map<ResourceLocation, NodeProgress> getAllProgress() {
+        return new HashMap<>(progress);
+    }
+
+    public Map<ResourceLocation, Integer> getAllInvested() {
+        return new HashMap<>(pointsInvested);
     }
 }

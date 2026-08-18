@@ -14,4 +14,10 @@ public class ModBlocks {
                     () -> new RuinBlock(Block.Properties.of()
                             .strength(-1.0F, 3600000.0F)
                             .noLootTable()));
+
+    public static final DeferredBlock<ResearchTableBlock> RESEARCH_TABLE =
+            BLOCKS.register("research_table",
+                    () -> new ResearchTableBlock(Block.Properties.of()
+                            .strength(3.5F)
+                            .requiresCorrectToolForDrops()));
 }

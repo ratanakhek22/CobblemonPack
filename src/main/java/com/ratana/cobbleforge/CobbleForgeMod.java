@@ -21,6 +21,7 @@ import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.player.ResearchPointHooks;
 import com.ratana.cobbleforge.research.item.ForgottenKnowledge;
 import com.ratana.cobbleforge.research.item.ResearchJournal;
+import com.ratana.cobbleforge.research.menu.ModMenuTypes;
 
 @Mod(CobbleForgeMod.MOD_ID)
 public class CobbleForgeMod {
@@ -42,6 +43,9 @@ public class CobbleForgeMod {
     public static final DeferredItem<BlockItem> RUIN_BLOCK_ITEM = ITEMS.registerSimpleBlockItem(
             "ruin_block", ModBlocks.RUIN_BLOCK
     );
+    public static final DeferredItem<BlockItem> RESEARCH_TABLE_ITEM = ITEMS.registerSimpleBlockItem(
+            "research_table", ModBlocks.RESEARCH_TABLE
+    );
 
     public CobbleForgeMod(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.BLOCKS.register(modEventBus);
@@ -49,6 +53,7 @@ public class CobbleForgeMod {
         CREATIVE_MODE_TABS.register(modEventBus);
         ModAttachments.ATTACHMENT_TYPES.register(modEventBus);
         ModBlockEntities.BLOCK_ENTITIES.register(modEventBus);
+        ModMenuTypes.MENU_TYPES.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
     }
