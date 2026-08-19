@@ -20,6 +20,8 @@ public class ModResearchNodes {
 
         // Flagship legendaries: 2 stages only, hands off to a bespoke chain afterward
         registerBespoke("cobblemon:mewtwo");
+
+        registerShared("cobblemon:your_mom"); //test
     }
 
     private static final int TOTAL_COST = 60; // placeholder — same for every legendary per your design doc

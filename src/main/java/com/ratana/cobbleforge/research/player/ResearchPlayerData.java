@@ -2,6 +2,7 @@ package com.ratana.cobbleforge.research.player;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -107,6 +108,39 @@ public class ResearchPlayerData {
         points -= cost;
         progress.put(speciesId, target);
         pointsInvested.merge(speciesId, cost, Integer::sum);
+        return true;
+    }
+
+    /**
+     * Adds a flat `amount` of investment into a node, if affordable, then re-derives that
+     * node's NodeProgress from the new cumulative invested total via
+     * def.progressForInvested(...) — see the required addition to ResearchNodeDefinition
+     * below. Unlike tryAdvance, this doesn't target a specific stage; a single call may
+     * cover only part of a stage's cost (progress stays put, invested still climbs), or in
+     * principle cross more than one stage at once if amount is ever made larger than a
+     * single stage's cost.
+     *
+     * Rejects outright (no deduction at all) rather than silently wasting points if:
+     *  - amount isn't positive, or the player can't afford it, or
+     *  - the node is already at its final stage (def.finalProgress()) — nothing left to buy,
+     *    so there's no reason to let a stray/duplicate client packet drain points for nothing.
+     *
+     * Returns whether the investment was accepted, so the caller can decide whether a sync
+     * is even necessary (a rejected invest changes nothing worth broadcasting).
+     */
+    public boolean invest(ResourceLocation speciesId, ResearchNodeDefinition def, int amount) {
+        if (amount <= 0 || points < amount) return false;
+
+        NodeProgress current = getProgress(speciesId);
+        if (current == def.finalProgress()) return false; // fully unlocked already, nothing to buy
+
+        points -= amount;
+        int newInvested = pointsInvested.merge(speciesId, amount, Integer::sum);
+
+        NodeProgress computed = def.progressForInvested(newInvested);
+        if (computed.ordinal() > current.ordinal()) {
+            progress.put(speciesId, computed);
+        }
         return true;
     }
 

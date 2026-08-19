@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record ResearchActionPayload(ResourceLocation nodeId, Action action) implements CustomPacketPayload {
 
-    public enum Action { BUY_SILHOUETTE, BUY_REVEAL, BUY_INGREDIENTS, SPEND_FORGOTTEN_KNOWLEDGE }
+    public enum Action { INVEST, BUY_SILHOUETTE, BUY_REVEAL, BUY_INGREDIENTS, SPEND_FORGOTTEN_KNOWLEDGE }
 
     public static final Type<ResearchActionPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath("cobbleforge", "research_action"));

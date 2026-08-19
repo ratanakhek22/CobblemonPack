@@ -7,12 +7,17 @@ import com.ratana.cobbleforge.research.node.NodeSlotLayout;
 import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
 import com.ratana.cobbleforge.research.player.NodeProgress;
 
+import com.cobblemon.mod.common.api.pokemon.PokemonSpecies;
+import com.cobblemon.mod.common.item.PokemonItem;
+import com.cobblemon.mod.common.pokemon.Species;
+
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -20,6 +25,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector2f;
+import org.joml.Vector4f;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -27,33 +33,49 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Renders the research nodes as a star field, and transitions IN PLACE (no screen
- * close/reopen) into a per-node detail view when a star is clicked. Esc from the
- * detail view returns to the star field; Esc from the star field falls through to
- * vanilla behavior and closes the whole menu.
-
- * Two things are deliberately pluggable so they're cheap to swap while iterating:
- *  - {@link NodeTooltipProvider}: controls hover-tooltip content in the star field.
- *  - {@link PokemonSpriteSource}: controls where node art comes from (Cobblemon
- *    lookup with a built-in fallback). See the CobblemonSpriteSource TODO below
- *    before wiring the real lookup.
- */
 @OnlyIn(Dist.CLIENT)
 public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> {
 
     private static final int STAR_SIZE = 6;
     private static final int FIELD_RADIUS = 70;
 
-    /** Built-in placeholder used whenever a real sprite can't be resolved. */
-    private static final ResourceLocation FALLBACK_SPRITE =
-            ResourceLocation.fromNamespaceAndPath("cobbleforge", "textures/gui/research/unknown_pokemon.png");
+    /** Every "research deeper" click costs exactly this, regardless of node or stage — the
+     *  whole point is that the cost can never hint at what kind of node this is. */
+    private static final int INVESTMENT_INCREMENT = 10;
+
+    /** Client-side-only cooldown after a click, so a fast double-click can't fire two
+     *  investments before the first sync response lands. Purely a UX/race guard — the
+     *  server should still be the actual source of truth on what's affordable. */
+    private static final long INVEST_DELAY_MS = 600;
+
+    /** Built-in placeholder used whenever a real sprite can't be resolved (unknown species, etc). */
+    private static final ItemStack FALLBACK_SPRITE_STACK = new ItemStack(net.minecraft.world.item.Items.BARRIER);
+
+    // ---------------- tome color palette ----------------
+    // Kept as named constants so the look can be re-tuned in one place without touching
+    // any of the layout/render call sites below.
+
+    /** Deep night-sky panel color for the star-field page. */
+    private static final int COLOR_NIGHT_SKY = 0xFF120B2E;
+    /** Leather cover / binding color used for the frame around both pages. */
+    private static final int COLOR_LEATHER_TRIM = 0xFF6B4423;
+    /** Gilt edging accent — pinstripe border, dividers, star color at full progress. */
+    private static final int COLOR_GOLD = 0xFFD4AF37;
+    /** Aged parchment page background for the detail/"tome page" view. */
+    private static final int COLOR_PARCHMENT = 0xFFE8D9B5;
+    /** Slightly darker parchment tone, used for edge shading and the portrait frame backing. */
+    private static final int COLOR_PARCHMENT_SHADOW = 0xFFCBB98A;
+    /** Main ink color for body text on the parchment page. */
+    private static final int COLOR_INK = 0xFF2B1D0E;
+    /** Faded ink, for secondary/placeholder text ("???", required items list, etc). */
+    private static final int COLOR_INK_FADED = 0xFF6B5A3E;
+    /** Illuminated-manuscript-style deep red, used for section headers. */
+    private static final int COLOR_INK_HEADER = 0xFF7A1F1F;
 
     private enum ViewState { STAR_FIELD, NODE_DETAIL }
 
     private ViewState viewState = ViewState.STAR_FIELD;
 
-    /** Node currently shown in the detail view, if any. */
     private ResourceLocation detailNodeId;
 
     /** Used to detect a purchase landing while the detail view is open, so we can rebuild it. */
@@ -62,10 +84,14 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
     private Button backButton;
     private Button actionButton;
 
+    /** 0 = no investment pending. Otherwise, a click is "in flight" until this time passes. */
+    private long investPendingUntilMs = 0L;
+    private boolean lastPendingRendered = false;
+
     /** Swap this out freely while testing different tooltip layouts/content. */
     private NodeTooltipProvider tooltipProvider = new DefaultNodeTooltipProvider();
 
-    /** Swap this out once the real Cobblemon hook is wired; falls back to FALLBACK_SPRITE either way. */
+    /** Swap this out to try a different sprite strategy; falls back to FALLBACK_SPRITE_STACK either way. */
     private PokemonSpriteSource spriteSource = new CobblemonSpriteSource();
 
     public ModResearchScreen(ModResearchMenu menu, Inventory inv, Component title) {
@@ -73,10 +99,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         this.imageWidth = 236;
         this.imageHeight = 240;
     }
-
-    // ------------------------------------------------------------------
-    // Background rendering — star field vs. node detail
-    // ------------------------------------------------------------------
 
     @Override
     protected void renderBg(@NotNull GuiGraphics graphics, float partialTick, int mouseX, int mouseY) {
@@ -89,13 +111,18 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
 
     private void renderStarFieldBg(GuiGraphics graphics) {
         int x = leftPos, y = topPos;
-        graphics.fill(x, y, x + imageWidth, y + imageHeight, 0xFF0B0B1A); // night-sky panel
+
+        graphics.fill(x, y, x + imageWidth, y + imageHeight, COLOR_NIGHT_SKY);
+        renderNightVignette(graphics, x, y);
+        renderTomeFrame(graphics, x, y);
 
         int centerX = x + imageWidth / 2;
         int centerY = y + 90;
 
         List<ResourceLocation> order = menu.getCachedSlotOrder();
         Map<ResourceLocation, Vector2f> positions = NodeSlotLayout.layoutAll(order, centerX, centerY);
+
+        drawConstellationLines(graphics, order, positions);
 
         for (ResourceLocation nodeId : order) {
             Vector2f pos = positions.get(nodeId);
@@ -105,38 +132,99 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
 
     private void renderDetailBg(GuiGraphics graphics, ResourceLocation nodeId) {
         int x = leftPos, y = topPos;
-        graphics.fill(x, y, x + imageWidth, y + imageHeight, 0xFF0B0B1A);
+
+        graphics.fill(x, y, x + imageWidth, y + imageHeight, COLOR_PARCHMENT);
+        renderParchmentShading(graphics, x, y);
+        renderTomeFrame(graphics, x, y);
 
         ResearchNodeDefinition def = lookupDefinition(nodeId);
-        NodeProgress progress = menu.getCachedProgress(nodeId);
         if (def == null) return;
 
+        if (!spriteSource.isKnown(def.speciesId())) {
+            renderUnavailableDetail(graphics, def);
+            return;
+        }
+
+        NodeProgress progress = menu.getCachedProgress(nodeId);
         DetailSections sections = buildDetailSections(def, progress);
 
         // Portrait area
-        int portraitX = x + (imageWidth - 64) / 2;
+        int portraitX = x + (imageWidth - 16) / 2;
         int portraitY = y + 26;
+        renderPortraitFrame(graphics, portraitX, portraitY);
         if (sections.identityRevealed) {
             boolean silhouette = progress == NodeProgress.SILHOUETTE;
-            ResourceLocation sprite = spriteSource.spriteFor(def.speciesId(), silhouette);
-            if (sprite == null) sprite = FALLBACK_SPRITE;
-            graphics.blit(sprite, portraitX, portraitY, 0, 0, 64, 64, 64, 64);
+            renderPortrait(graphics, def.speciesId(), silhouette, portraitX, portraitY);
         } else {
-            graphics.drawCenteredString(font, "???", x + imageWidth / 2, portraitY + 26, 0xFFFFFF);
+            graphics.drawCenteredString(font, "???", x + imageWidth / 2, portraitY + 4, COLOR_INK);
         }
 
         // Description
-        int descY = portraitY + 70;
-        graphics.drawWordWrap(font, sections.description, x + 12, descY, imageWidth - 24, 0xDDDDDD);
+        int descY = portraitY + 40;
+        graphics.drawWordWrap(font, sections.description, x + 12, descY, imageWidth - 24, COLOR_INK);
+
+        // Purely decorative divider between description and the recipe/next-steps section —
+        // doesn't move recipeY/lineY, just draws a rule above them.
+        int dividerY = descY + 32;
+        graphics.fill(x + 12, dividerY, x + imageWidth - 12, dividerY + 1, COLOR_GOLD);
 
         // Recipe / next-steps section
         int recipeY = descY + 40;
-        graphics.drawString(font, sections.recipeHeader, x + 12, recipeY, 0xF1C40F, false);
+        graphics.drawString(font, sections.recipeHeader, x + 12, recipeY, COLOR_INK_HEADER, false);
         int lineY = recipeY + 12;
         for (Component line : sections.recipeLines) {
-            graphics.drawString(font, line, x + 12, lineY, 0xCCCCCC, false);
+            graphics.drawString(font, line, x + 12, lineY, COLOR_INK_FADED, false);
             lineY += 10;
         }
+    }
+
+    /**
+     * A node whose species doesn't resolve at all (typo'd id, species removed from the
+     * modpack, addon mod not installed, etc). Deliberately its own render path rather than a
+     * fallback baked into the normal LOCKED/SILHOUETTE/REVEALED flow — none of those stages
+     * mean anything if there's no real species behind them, so we don't let the player spend
+     * points revealing further into something that can never resolve.
+     */
+    private void renderUnavailableDetail(GuiGraphics graphics, ResearchNodeDefinition def) {
+        int x = leftPos, y = topPos;
+
+        int portraitX = x + (imageWidth - 16) / 2;
+        int portraitY = y + 26;
+        renderPortraitFrame(graphics, portraitX, portraitY);
+        graphics.renderItem(FALLBACK_SPRITE_STACK, portraitX, portraitY);
+
+        int textY = portraitY + 24;
+        graphics.drawCenteredString(font, "Research entry unavailable", x + imageWidth / 2, textY, COLOR_INK_HEADER);
+
+        Component detail = Component.literal(
+                "This Pokémon isn't in the current modpack, or its entry is misconfigured. (" + def.speciesId() + ")");
+        graphics.drawWordWrap(font, detail, x + 12, textY + 14, imageWidth - 24, COLOR_INK_FADED);
+    }
+
+    /**
+     * Renders the node's item-form sprite via GuiGraphics#renderItem (vanilla item rendering,
+     * the mechanism Cobblemon's PokemonItem is built to support). Silhouette tinting is baked
+     * into the returned ItemStack itself (Cobblemon's own tint parameter), not applied here.
+     */
+    private void renderPortrait(GuiGraphics graphics, ResourceLocation speciesId, boolean silhouette, int x, int y) {
+        ItemStack stack = spriteSource.spriteFor(speciesId, silhouette);
+        if (stack == null) stack = FALLBACK_SPRITE_STACK;
+        graphics.renderItem(stack, x, y);
+    }
+
+    /**
+     * Small gilt-edged box drawn behind the 16x16 portrait item icon, so it reads as an
+     * illustration set into the page rather than a floating item sprite. Purely decorative —
+     * doesn't affect the (px, py) the caller passes to renderItem.
+     */
+    private void renderPortraitFrame(GuiGraphics graphics, int px, int py) {
+        int pad = 3;
+        int size = 16;
+        graphics.fill(px - pad, py - pad, px + size + pad, py + size + pad, COLOR_PARCHMENT_SHADOW);
+        graphics.fill(px - pad, py - pad, px + size + pad, py - pad + 1, COLOR_GOLD);
+        graphics.fill(px - pad, py + size + pad - 1, px + size + pad, py + size + pad, COLOR_GOLD);
+        graphics.fill(px - pad, py - pad, px - pad + 1, py + size + pad, COLOR_GOLD);
+        graphics.fill(px + size + pad - 1, py - pad, px + size + pad, py + size + pad, COLOR_GOLD);
     }
 
     /** Fraction of this node's total unlock cost the player has invested so far, in [0,1]. */
@@ -147,10 +235,106 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         return Math.clamp(fraction, 0.0, 1.0);
     }
 
+    /**
+     * Draws a node as a small 4-point twinkling star with a soft glow, colored by progress
+     * (white -> gold, same lerpWhiteToGold as before). The glow/arm sizes are derived from
+     * STAR_SIZE so the visual stays roughly matched to findStarAt's unchanged hit radius.
+     */
     private void drawStar(GuiGraphics graphics, int cx, int cy, double fraction) {
         int color = lerpWhiteToGold(fraction);
-        int half = STAR_SIZE / 2;
-        graphics.fill(cx - half, cy - half, cx + half, cy + half, color);
+        int glowColor = (color & 0x00FFFFFF) | 0x33000000;
+
+        int glowHalf = STAR_SIZE + 3;
+        graphics.fill(cx - glowHalf, cy - glowHalf, cx + glowHalf, cy + glowHalf, glowColor);
+
+        graphics.fill(cx - STAR_SIZE, cy - 1, cx + STAR_SIZE, cy + 1, color);
+        graphics.fill(cx - 1, cy - STAR_SIZE, cx + 1, cy + STAR_SIZE, color);
+
+        int core = 2;
+        graphics.fill(cx - core, cy - core, cx + core, cy + core, 0xFFFFFFFF);
+    }
+
+    /**
+     * Faint gold lines connecting consecutive nodes in slot order, echoing a constellation
+     * chart. Purely decorative — reads from the same order/positions already computed for
+     * star placement and findStarAt, doesn't touch either.
+     */
+    private void drawConstellationLines(GuiGraphics graphics, List<ResourceLocation> order,
+                                        Map<ResourceLocation, Vector2f> positions) {
+        if (order.size() < 2) return;
+        int lineColor = 0x40D4AF37;
+        for (int i = 0; i < order.size() - 1; i++) {
+            Vector2f a = positions.get(order.get(i));
+            Vector2f b = positions.get(order.get(i + 1));
+            if (a == null || b == null) continue;
+            drawLine(graphics, Math.round(a.x()), Math.round(a.y()), Math.round(b.x()), Math.round(b.y()), lineColor);
+        }
+    }
+
+    /** Simple integer Bresenham line, plotted as 1x1 fills since GuiGraphics has no line primitive. */
+    private static void drawLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+        int dx = Math.abs(x2 - x1);
+        int dy = -Math.abs(y2 - y1);
+        int sx = x1 < x2 ? 1 : -1;
+        int sy = y1 < y2 ? 1 : -1;
+        int err = dx + dy;
+        int x = x1, y = y1;
+        while (true) {
+            graphics.fill(x, y, x + 1, y + 1, color);
+            if (x == x2 && y == y2) break;
+            int e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x += sx; }
+            if (e2 <= dx) { err += dx; y += sy; }
+        }
+    }
+
+    /** Thin leather-brown + gilt pinstripe frame drawn around the whole panel, shared by both
+     *  pages (and thus visible around the player-inventory area too, same as the old flat fill
+     *  covered the entire panel). */
+    private void renderTomeFrame(GuiGraphics graphics, int x, int y) {
+        int w = imageWidth, h = imageHeight;
+        int border = 4;
+
+        graphics.fill(x, y, x + w, y + border, COLOR_LEATHER_TRIM);
+        graphics.fill(x, y + h - border, x + w, y + h, COLOR_LEATHER_TRIM);
+        graphics.fill(x, y, x + border, y + h, COLOR_LEATHER_TRIM);
+        graphics.fill(x + w - border, y, x + w, y + h, COLOR_LEATHER_TRIM);
+
+        int gx = x + border, gy = y + border;
+        int gw = w - border * 2, gh = h - border * 2;
+        graphics.fill(gx, gy, gx + gw, gy + 1, COLOR_GOLD);
+        graphics.fill(gx, gy + gh - 1, gx + gw, gy + gh, COLOR_GOLD);
+        graphics.fill(gx, gy, gx + 1, gy + gh, COLOR_GOLD);
+        graphics.fill(gx + gw - 1, gy, gx + gw, gy + gh, COLOR_GOLD);
+    }
+
+    /** Subtle darkened edge bands on the night-sky page, cheap stand-in for a radial vignette. */
+    private void renderNightVignette(GuiGraphics graphics, int x, int y) {
+        int w = imageWidth, h = imageHeight;
+        for (int i = 0; i < 5; i++) {
+            int alpha = 0x22 - i * 4;
+            if (alpha <= 0) break;
+            int color = alpha << 24;
+            graphics.fill(x, y + i, x + w, y + i + 1, color);
+            graphics.fill(x, y + h - i - 1, x + w, y + h - i, color);
+            graphics.fill(x + i, y, x + i + 1, y + h, color);
+            graphics.fill(x + w - i - 1, y, x + w - i, y + h, color);
+        }
+    }
+
+    /** Aged-page edge shading on the parchment/detail page, same technique as the night
+     *  vignette but tinted brown instead of black. */
+    private void renderParchmentShading(GuiGraphics graphics, int x, int y) {
+        int w = imageWidth, h = imageHeight;
+        for (int i = 0; i < 5; i++) {
+            int alpha = 0x20 - i * 4;
+            if (alpha <= 0) break;
+            int color = (alpha << 24) | 0x3B2415;
+            graphics.fill(x, y + i, x + w, y + i + 1, color);
+            graphics.fill(x, y + h - i - 1, x + w, y + h - i, color);
+            graphics.fill(x + i, y, x + i + 1, y + h, color);
+            graphics.fill(x + w - i - 1, y, x + w - i, y + h, color);
+        }
     }
 
     private static int lerpWhiteToGold(double fraction) {
@@ -168,22 +352,23 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         return ModResearchNodes.get(nodeId);
     }
 
-    // ------------------------------------------------------------------
-    // Labels, tooltip, and top-level render
-    // ------------------------------------------------------------------
-
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, "Research Points: " + menu.getCachedPoints(), 8, 6, 0xFFFFFF, false);
+        graphics.drawString(font, "Research Points: " + menu.getCachedPoints(), 8, 6, COLOR_GOLD, true);
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Detail view may have advanced (a purchase landed) since the last frame — refresh widgets if so.
+    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         if (viewState == ViewState.NODE_DETAIL && detailNodeId != null) {
             NodeProgress current = menu.getCachedProgress(detailNodeId);
-            if (current != lastKnownProgress) {
+            boolean pendingNow = isInvestPending();
+            if (current != lastKnownProgress || pendingNow != lastPendingRendered) {
                 rebuildDetailWidgets();
+            }
+            lastPendingRendered = pendingNow;
+
+            if (pendingNow && actionButton != null) {
+                actionButton.setMessage(Component.literal("Researching" + spinnerDots()));
             }
         }
 
@@ -194,6 +379,18 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
             renderStarHoverTooltip(graphics, mouseX, mouseY);
         }
         renderTooltip(graphics, mouseX, mouseY);
+    }
+
+    private boolean isInvestPending() {
+        return System.currentTimeMillis() < investPendingUntilMs;
+    }
+
+    /** Cycles "." / ".." / "..." roughly every 200ms — placeholder animation, easy to swap
+     *  for a real hourglass icon once the rest of the look gets a pass. */
+    private String spinnerDots() {
+        long elapsed = INVEST_DELAY_MS - (investPendingUntilMs - System.currentTimeMillis());
+        int frame = (int) ((Math.max(elapsed, 0) / 200) % 3);
+        return ".".repeat(frame + 1);
     }
 
     private void renderStarHoverTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -209,10 +406,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         List<Component> lines = tooltipProvider.buildTooltip(def, progress, invested);
         graphics.renderComponentTooltip(font, lines, mouseX, mouseY);
     }
-
-    // ------------------------------------------------------------------
-    // Input handling
-    // ------------------------------------------------------------------
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -251,10 +444,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         return Optional.empty();
     }
 
-    // ------------------------------------------------------------------
-    // Star field <-> detail transition (in-place, same screen object)
-    // ------------------------------------------------------------------
-
     private void openDetail(ResourceLocation nodeId) {
         viewState = ViewState.NODE_DETAIL;
         detailNodeId = nodeId;
@@ -273,9 +462,9 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         removeDetailWidgets();
         if (detailNodeId == null) return;
 
+        ResearchNodeDefinition def = lookupDefinition(detailNodeId);
         NodeProgress progress = menu.getCachedProgress(detailNodeId);
         lastKnownProgress = progress;
-        ResearchActionPayload.Action action = actionForProgress(progress, lookupDefinition(detailNodeId));
 
         int x = leftPos, y = topPos;
 
@@ -284,12 +473,41 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
                 .build();
         addRenderableWidget(backButton);
 
-        if (action != null) {
-            actionButton = Button.builder(actionLabel(action), btn -> confirmPurchase(detailNodeId, action))
-                    .bounds(x + imageWidth - 90, y + imageHeight - 34, 80, 20)
+        // Unavailable nodes never get an investment button — there's nothing valid to buy into.
+        if (def == null || !spriteSource.isKnown(def.speciesId())) return;
+
+        int bx = x + imageWidth - 110, by = y + imageHeight - 34, bw = 100, bh = 20;
+
+        if (!canInvestMore(progress, def)) {
+            actionButton = Button.builder(Component.literal("Fully Unlocked"), btn -> {})
+                    .bounds(bx, by, bw, bh)
                     .build();
+            actionButton.active = false;
             addRenderableWidget(actionButton);
+            return;
         }
+
+        boolean pending = isInvestPending();
+        boolean affordable = menu.getCachedPoints() >= INVESTMENT_INCREMENT;
+
+        Component label = pending
+                ? Component.literal("Researching" + spinnerDots())
+                : Component.literal("Research Deeper (" + INVESTMENT_INCREMENT + ")");
+
+        actionButton = Button.builder(label, btn -> startInvestment(detailNodeId))
+                .bounds(bx, by, bw, bh)
+                .build();
+        actionButton.active = affordable && !pending;
+        addRenderableWidget(actionButton);
+    }
+
+    /** Whether this node can still absorb another investment at all — independent of whether
+     *  the player can currently afford one. False once fully unlocked, or once a bespoke node
+     *  hits its terminal REVEALED stage (bespoke nodes never reach READY_FOR_SACRIFICE — their
+     *  path continues via the chain document instead, not through more investment here). */
+    private static boolean canInvestMore(NodeProgress progress, ResearchNodeDefinition def) {
+        if (progress == NodeProgress.READY_FOR_SACRIFICE) return false;
+        return !(def.bespoke() && progress == NodeProgress.REVEALED);
     }
 
     private void removeDetailWidgets() {
@@ -303,39 +521,22 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         }
     }
 
-    private void confirmPurchase(ResourceLocation nodeId, ResearchActionPayload.Action action) {
-        PacketDistributor.sendToServer(new ResearchActionPayload(nodeId, action));
-        // Stay on the detail view — render() will notice the progress change once the
-        // server->client sync lands and rebuild the widgets/text automatically.
-    }
+    private void startInvestment(ResourceLocation nodeId) {
+        // NOTE: this assumes ResearchActionPayload.Action gains a generic INVEST entry, and
+        // the server-side handler in ResearchNetworking adds INVESTMENT_INCREMENT to that
+        // node's invested total and recomputes NodeProgress by checking which weight-derived
+        // thresholds have now been crossed — rather than matching an exact "buy this stage"
+        // cost like the old BUY_SILHOUETTE/BUY_REVEAL/BUY_INGREDIENTS actions did. That's a
+        // real behavior change on the server side, not just a rename; I haven't seen
+        // ResearchActionPayload.java or ResearchNetworking.java in full, so I've left this as
+        // the shape the client needs rather than guessing at their contents.
+        PacketDistributor.sendToServer(new ResearchActionPayload(nodeId, ResearchActionPayload.Action.INVEST));
 
-    /**
-     * Which purchase action (if any) applies at this node's current stage.
-     * Bespoke nodes stop needing a purchase after REVEALED — there's no shared
-     * "buy ingredients" step for them, their path continues via the chain document instead.
-     */
-    private static ResearchActionPayload.Action actionForProgress(NodeProgress progress, ResearchNodeDefinition def) {
-        boolean bespoke = def != null && def.bespoke();
-        return switch (progress) {
-            case LOCKED -> ResearchActionPayload.Action.BUY_SILHOUETTE;
-            case SILHOUETTE -> ResearchActionPayload.Action.BUY_REVEAL;
-            case REVEALED -> bespoke ? null : ResearchActionPayload.Action.BUY_INGREDIENTS;
-            case READY_FOR_SACRIFICE -> null;
-        };
+        investPendingUntilMs = System.currentTimeMillis() + INVEST_DELAY_MS;
+        if (actionButton != null) {
+            actionButton.active = false;
+        }
     }
-
-    private static Component actionLabel(ResearchActionPayload.Action action) {
-        return switch (action) {
-            case BUY_SILHOUETTE -> Component.literal("Reveal Silhouette");
-            case BUY_REVEAL -> Component.literal("Reveal Identity");
-            case BUY_INGREDIENTS -> Component.literal("Reveal Requirements");
-            default -> Component.literal("Confirm");
-        };
-    }
-
-    // ------------------------------------------------------------------
-    // Detail-view content assembly (the ???-reveal rules)
-    // ------------------------------------------------------------------
 
     private record DetailSections(
             boolean identityRevealed,
@@ -345,12 +546,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
     ) {}
 
     private DetailSections buildDetailSections(ResearchNodeDefinition def, NodeProgress progress) {
-        // Stage 1 (LOCKED): everything is "???".
-        // Stage 2 (SILHOUETTE): identity gets a black-silhouette sprite; description/recipe stay "???".
-        // Stage 3 (REVEALED): sprite goes color, description text is revealed.
-        //   - bespoke nodes also reveal their "next steps" placeholder here, since they have no
-        //     shared recipe step.
-        // Stage 4 (READY_FOR_SACRIFICE, non-bespoke only): recipe section gets the real item list.
         boolean identityRevealed = progress != NodeProgress.LOCKED;
         boolean infoRevealed = progress == NodeProgress.REVEALED || progress == NodeProgress.READY_FOR_SACRIFICE;
         boolean recipeRevealed = progress == NodeProgress.READY_FOR_SACRIFICE;
@@ -389,10 +584,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         return lines;
     }
 
-    // ------------------------------------------------------------------
-    // Pluggable tooltip content
-    // ------------------------------------------------------------------
-
     /** Implement this to try a different hover-tooltip layout without touching render logic. */
     public interface NodeTooltipProvider {
         List<Component> buildTooltip(ResearchNodeDefinition def, NodeProgress progress, int invested);
@@ -404,7 +595,8 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
             List<Component> lines = new ArrayList<>();
             lines.add(Component.literal(progress == NodeProgress.LOCKED ? "???" : def.speciesId().getPath()));
             lines.add(Component.literal(stageLabel(progress)));
-            lines.add(Component.literal("Invested: " + invested + " / " + def.totalCost()));
+            lines.add(Component.literal("Invested: " + invested));
+//            lines.add(Component.literal("Invested: " + invested + " / " + def.totalCost()));
             return lines;
         }
 
@@ -423,53 +615,34 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         this.tooltipProvider = provider;
     }
 
-    // ------------------------------------------------------------------
-    // Pluggable sprite source (Cobblemon hook)
-    // ------------------------------------------------------------------
-
     /**
-     * Resolves a texture for a species. Implementations should return null (not throw) on
-     * any failure so the caller can fall back to FALLBACK_SPRITE — a node with a typo'd
-     * speciesId or a missing addon should degrade to the placeholder, not crash the screen.
+     * Resolves a species to its Cobblemon item-form ItemStack, with the silhouette tint baked
+     * in when requested. Kept as one method (not tint applied separately) since Cobblemon's
+     * own PokemonItem.from takes the tint at creation time, not as a post-render step.
      */
     public interface PokemonSpriteSource {
         @Nullable
-        ResourceLocation spriteFor(ResourceLocation speciesId, boolean silhouette);
+        ItemStack spriteFor(ResourceLocation speciesId, boolean silhouette);
+
+        /** Cheap existence check, used to detect a node whose species doesn't resolve at all. */
+        boolean isKnown(ResourceLocation speciesId);
     }
 
-    /**
-     * TODO — not wired yet. This is the part worth checking against your local Cobblemon
-     * source/jar before filling in, since the exact hook differs depending on whether you
-     * want a flat 2D sprite (cheap, always available) or the real 3D model silhouette-shaded
-     * the way Cobblemon's own Pokédex GUI does it (nicer, more involved).
-     *
-     * Where to look in the Cobblemon sources you have locally:
-     *  - `com.cobblemon.mod.common.api.pokemon.PokemonSpecies` — species lookup by id/name
-     *    (`PokemonSpecies.INSTANCE.getByIdentifier(...)` / `getByName(...)`), gives you a
-     *    `Species` with `resourceIdentifier` you can key off of.
-     *  - The Pokédex GUI's own Kotlin class (search the client package for something like
-     *    `PokedexGUI` / `PokedexScreen`) is the best reference for "known vs. unknown" —
-     *    it already solves exactly this problem (silhouette-for-unseen, color-for-seen).
-     *    Reading how *it* decides what to blit is more reliable than guessing texture paths.
-     *  - If it renders a flat sprite: look for a texture path convention under
-     *    `assets/cobblemon/textures/...` (species icon/portrait folder) you can build a
-     *    ResourceLocation from directly — that's the cheap option and matches this method's
-     *    signature as-is.
-     *  - If it renders the real 3D model (posed, not a flat png): look at
-     *    `com.cobblemon.mod.common.client.render.models.blockbench.repository.PokemonModelRepository`
-     *    and however the Pokédex GUI invokes it into a render target/GuiGraphics. That's a
-     *    render-to-texture problem, not a "return a ResourceLocation" one — this interface
-     *    would need to change shape (e.g. a `renderPortrait(graphics, x, y, size, ...)` method
-     *    instead) if you go this route. Worth deciding which look you want before building it out.
-     *
-     * Until this is filled in, every call returns null and the screen shows FALLBACK_SPRITE,
-     * which keeps the detail view fully functional (identity/description/recipe reveal logic
-     * doesn't depend on this working).
-     */
     private static final class CobblemonSpriteSource implements PokemonSpriteSource {
+        private static final Vector4f SILHOUETTE_TINT = new Vector4f(0f, 0f, 0f, 1f);
+
         @Override
-        public @Nullable ResourceLocation spriteFor(ResourceLocation speciesId, boolean silhouette) {
-            return null; // TODO
+        public @Nullable ItemStack spriteFor(ResourceLocation speciesId, boolean silhouette) {
+            Species species = PokemonSpecies.getByIdentifier(speciesId);
+            if (species == null) return null;
+
+            Vector4f tint = silhouette ? SILHOUETTE_TINT : null;
+            return PokemonItem.from(species, new String[0], 1, tint);
+        }
+
+        @Override
+        public boolean isKnown(ResourceLocation speciesId) {
+            return PokemonSpecies.getByIdentifier(speciesId) != null;
         }
     }
 
