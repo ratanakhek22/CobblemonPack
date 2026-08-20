@@ -11,19 +11,32 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
-/**
- * Server -> Client: full snapshot of this player's research state. Sent once when the
- * table menu opens, and re-sent after every successful action. Full-snapshot rather
- * than incremental diffs is fine here -- ResearchPlayerData's own doc comment notes
- * recomputing slot order is "cheap at this scale (tens of nodes)".
- */
 public record ResearchSyncPayload(
         int points,
-        List<ResourceLocation> orderedNodeIds,   // index == slot position, server-computed
+        List<ResourceLocation> orderedNodeIds,
         Map<ResourceLocation, NodeProgress> progress,
-        Map<ResourceLocation, Integer> invested
+        Map<ResourceLocation, Integer> invested,
+        Optional<RedeemResult> redeemResult   // NEW: empty for every ordinary sync; populated
+        // only immediately after a redeem, read once by
+        // the client and never re-shown on later syncs.
 ) implements CustomPacketPayload {
+
+    /** amount is 0 when wasFallback is true (the flat NO_TARGET_FALLBACK_POINTS points went
+     *  to the player's wallet, not to any specific node, so there's no node/amount pair to
+     *  show — the client should render a different message for that case). nodeId is present
+     *  either way isn't needed for the fallback case; encoded as the table's own placeholder
+     *  ResourceLocation isn't ideal, so nodeId is itself an Optional too. */
+    public record RedeemResult(Optional<ResourceLocation> nodeId, int amount, boolean wasFallback) {
+        public static final StreamCodec<RegistryFriendlyByteBuf, RedeemResult> STREAM_CODEC =
+                StreamCodec.composite(
+                        ResourceLocation.STREAM_CODEC.apply(ByteBufCodecs::optional), RedeemResult::nodeId,
+                        ByteBufCodecs.VAR_INT, RedeemResult::amount,
+                        ByteBufCodecs.BOOL, RedeemResult::wasFallback,
+                        RedeemResult::new
+                );
+    }
 
     public static final Type<ResearchSyncPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath("cobbleforge", "research_sync"));
@@ -39,6 +52,7 @@ public record ResearchSyncPayload(
                     ), ResearchSyncPayload::progress,
                     ByteBufCodecs.map(HashMap::new, ResourceLocation.STREAM_CODEC, ByteBufCodecs.VAR_INT),
                     ResearchSyncPayload::invested,
+                    RedeemResult.STREAM_CODEC.apply(ByteBufCodecs::optional), ResearchSyncPayload::redeemResult,
                     ResearchSyncPayload::new
             );
 

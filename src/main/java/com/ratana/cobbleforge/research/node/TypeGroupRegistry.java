@@ -50,9 +50,6 @@ public final class TypeGroupRegistry {
         }
     }
 
-    /** A dual-typed species can belong to two DIFFERENT groups if its two types map to
-     *  different groups (per design: "in both pools if they don't overlap into one item").
-     *  A species whose two types map to the SAME group is naturally deduped via the Set. */
     private static Set<TypeGroup> groupsFor(ResourceLocation speciesId) {
         Species species = PokemonSpecies.getByIdentifier(speciesId);
         if (species == null) return Set.of();

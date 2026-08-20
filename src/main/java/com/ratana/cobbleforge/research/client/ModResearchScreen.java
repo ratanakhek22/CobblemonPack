@@ -2,6 +2,7 @@ package com.ratana.cobbleforge.research.client;
 
 import com.ratana.cobbleforge.research.menu.ModResearchMenu;
 import com.ratana.cobbleforge.research.network.ResearchActionPayload;
+import com.ratana.cobbleforge.research.network.ResearchRedeemPayload;
 import com.ratana.cobbleforge.research.network.ResearchViewPayload;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.NodeSlotLayout;
@@ -68,6 +69,7 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
     private Button actionButton;
     private Button forgottenKnowledgeButton;
     private Button redeemButton;
+    private Button redeemConfirmButton;
 
     private float panX = 0f;
     private float panY = 0f;
@@ -410,6 +412,9 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
                 forgottenKnowledgeButton.setMessage(Component.literal("Researching" + spinnerDots()));
             }
         }
+        if (viewState == ViewState.REDEEM) {
+            updateRedeemConfirmButtonState();
+        }
 
         renderBackground(graphics, mouseX, mouseY, partialTick);
         super.render(graphics, mouseX, mouseY, partialTick);
@@ -637,6 +642,10 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
             removeWidget(forgottenKnowledgeButton);
             forgottenKnowledgeButton = null;
         }
+        if (redeemConfirmButton != null) {
+            removeWidget(redeemConfirmButton);
+            redeemConfirmButton = null;
+        }
     }
 
     private void startInvestment(ResourceLocation nodeId) {
@@ -698,8 +707,26 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
                 .build();
         addRenderableWidget(backButton);
 
-        // NOTE: redeem-confirm button (Ancient Item + Brush -> discount, result message) is
-        // still separate unbuilt work, blocked on Ancient Items existing.
+        int bw = 100, bh = 20;
+        int bx = x + (imageWidth - bw) / 2, by = y + imageHeight - 34;
+
+        redeemConfirmButton = Button.builder(Component.literal("Redeem"), btn -> startRedeem())
+                .bounds(bx, by, bw, bh)
+                .build();
+        updateRedeemConfirmButtonState();
+        addRenderableWidget(redeemConfirmButton);
+    }
+
+    private void updateRedeemConfirmButtonState() {
+        if (redeemConfirmButton == null) return;
+        boolean ready = menu.hasJournalClient() && menu.hasAncientItemClient() && menu.hasBrushClient() && !isInvestPending();
+        redeemConfirmButton.active = ready;
+    }
+
+    private void startRedeem() {
+        PacketDistributor.sendToServer(new ResearchRedeemPayload());
+        investPendingUntilMs = System.currentTimeMillis() + INVEST_DELAY_MS;
+        if (redeemConfirmButton != null) redeemConfirmButton.active = false;
     }
 
     private void removeRedeemWidgets() {

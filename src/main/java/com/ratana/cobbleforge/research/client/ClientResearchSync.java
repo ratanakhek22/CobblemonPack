@@ -14,6 +14,7 @@ public final class ClientResearchSync {
         if (Minecraft.getInstance().player == null) return;
         if (Minecraft.getInstance().player.containerMenu instanceof ModResearchMenu menu) {
             menu.applySync(payload.points(), payload.orderedNodeIds(), payload.progress(), payload.invested());
+            payload.redeemResult().ifPresent(menu::setLastRedeemResult);
         }
     }
 }

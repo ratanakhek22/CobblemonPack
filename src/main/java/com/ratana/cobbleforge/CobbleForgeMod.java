@@ -7,6 +7,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
@@ -83,11 +84,15 @@ public class CobbleForgeMod {
         ModMenuTypes.MENU_TYPES.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
+        NeoForge.EVENT_BUS.addListener(this::onServerStarting);
+    }
+
+    private void onServerStarting(net.neoforged.neoforge.event.server.ServerStartingEvent event) {
+        TypeGroupRegistry.bootstrap(ModResearchNodes.all().values());
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
         ModResearchNodes.bootstrap();
-        TypeGroupRegistry.bootstrap(ModResearchNodes.all().values());
         ResearchPointHooks.register();
     }
 }

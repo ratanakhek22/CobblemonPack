@@ -12,6 +12,7 @@ import com.ratana.cobbleforge.research.player.ResearchPlayerData;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -37,11 +38,12 @@ public final class ResearchNetworking {
      */
     private static final int INVESTMENT_INCREMENT = 10;
     private static final int ANCIENT_ITEM_DISCOUNT = 10;
+    private static final int NO_TARGET_FALLBACK_POINTS = 4;
 
-    private static Optional<ResourceLocation> pickEligibleTarget(TypeGroup group, ResearchPlayerData data,
-                                                                 Map<ResourceLocation, ResearchNodeDefinition> defs,
-                                                                 Random random) {
-        List<ResourceLocation> eligible = TypeGroupRegistry.membersOf(group).stream()
+    private static Optional<ResourceLocation> pickEligibleTarget(
+            com.ratana.cobbleforge.research.node.TypeGroup group, ResearchPlayerData data,
+            Map<ResourceLocation, ResearchNodeDefinition> defs, java.util.Random random) {
+        List<ResourceLocation> eligible = com.ratana.cobbleforge.research.node.TypeGroupRegistry.membersOf(group).stream()
                 .filter(id -> {
                     ResearchNodeDefinition def = defs.get(id);
                     return def != null && data.getPointsInvested(id) < def.totalCost();
@@ -60,6 +62,46 @@ public final class ResearchNetworking {
                 (payload, context) -> context.enqueueWork(() -> ClientResearchSync.apply(payload)));
         registrar.playToServer(ResearchViewPayload.TYPE, ResearchViewPayload.STREAM_CODEC,
                 ResearchNetworking::handleViewChange);
+        registrar.playToServer(ResearchRedeemPayload.TYPE, ResearchRedeemPayload.STREAM_CODEC,
+                ResearchNetworking::handleRedeem);
+    }
+
+    private static void handleRedeem(ResearchRedeemPayload payload,
+                                     net.neoforged.neoforge.network.handling.IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer sp)) return;
+            if (!(sp.containerMenu instanceof com.ratana.cobbleforge.research.menu.ModResearchMenu menu)) return;
+
+            ResearchTableBlockEntity be = menu.getBlockEntity();
+            if (be == null || !be.hasJournal()) return;
+
+            ItemStack ancientStack = be.getItem(ResearchTableBlockEntity.SLOT_ANCIENT_ITEM);
+            ItemStack brushStack = be.getItem(ResearchTableBlockEntity.SLOT_BRUSH);
+            if (ancientStack.isEmpty() || brushStack.isEmpty()) return;
+
+            TypeGroup group = ResearchTableBlockEntity.ancientItemGroup(ancientStack);
+            if (group == null) return;
+
+            ResearchPlayerData data = getPlayerData(sp);
+            Random random = new Random();
+
+            Optional<ResourceLocation> target = pickEligibleTarget(group, data, getDefinitions(), random);
+
+            be.removeItem(ResearchTableBlockEntity.SLOT_ANCIENT_ITEM, 1);
+            brushStack.hurtAndBreak(1, sp, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+
+            if (target.isPresent()) {
+                ResourceLocation nodeId = target.get();
+                ResearchNodeDefinition def = getDefinitions().get(nodeId);
+                data.creditInvestedCapped(nodeId, def, ANCIENT_ITEM_DISCOUNT);
+                sendSync(sp, data, Optional.of(new ResearchSyncPayload.RedeemResult(
+                        Optional.of(nodeId), ANCIENT_ITEM_DISCOUNT, false)));
+            } else {
+                data.addPoints(NO_TARGET_FALLBACK_POINTS);
+                sendSync(sp, data, Optional.of(new ResearchSyncPayload.RedeemResult(
+                        Optional.empty(), NO_TARGET_FALLBACK_POINTS, true)));
+            }
+        });
     }
 
     private static void handleViewChange(ResearchViewPayload payload,
@@ -110,40 +152,22 @@ public final class ResearchNetworking {
         });
     }
 
-    /**
-     * NOTE: data.invest(...) doesn't exist yet -- this is the shape ResearchPlayerData needs
-     * to grow to make this compile and actually work. Written here as a spec rather than
-     * guessed-at code, since I haven't seen ResearchPlayerData.java's real internals (points
-     * storage, invested map, progress map) to implement it correctly myself.
-     * Expected contract for ResearchPlayerData#invest(nodeId, def, amount):
-     *  1. If getPoints() < amount, do nothing -- reject silently. The client already disables
-     *     the button when it can't afford a click, but that's a courtesy, not a guarantee;
-     *     the server is the only side allowed to actually decide this.
-     *  2. Otherwise: subtract `amount` from points, add `amount` to invested[nodeId].
-     *  3. Re-derive NodeProgress from the new cumulative invested[nodeId] against def's ordered
-     *     stages() and their (now-flat, per your last refactor) per-stage cost -- e.g. walk the
-     *     stage list, accumulating each stage's cost, and set progress to the furthest stage
-     *     whose cumulative cost the invested total now covers. Loop rather than checking only
-     *     "one stage forward," in case INVESTMENT_INCREMENT is ever changed to jump more than
-     *     one stage's worth in a single click.
-     *  4. Bespoke nodes stop at REVEALED -- def.stages() already excludes SACRIFICE_INFO for
-     *     them (per the existing bespoke guard this method is replacing), so walking exactly
-     *     def.stages() naturally respects that without a separate bespoke check here.
-     *  5. Never let progress move backward, and never overshoot past def.stages()'s last entry
-     *     even if invested somehow exceeds totalCost (shouldn't happen if the server rejects
-     *     over-budget invests at step 1, but worth the same defensive floor/ceiling either way).
-     */
     private static void handleInvest(ResearchPlayerData data, ResourceLocation nodeId, ResearchNodeDefinition def) {
         data.invest(nodeId, def, INVESTMENT_INCREMENT);
     }
 
     public static void sendSync(ServerPlayer player, ResearchPlayerData data) {
+        sendSync(player, data, Optional.empty());
+    }
+
+    public static void sendSync(ServerPlayer player, ResearchPlayerData data,
+                                Optional<ResearchSyncPayload.RedeemResult> redeemResult) {
         List<ResourceLocation> order = data.computeSlotOrder(getDefinitions().keySet(), new java.util.Random());
         Map<ResourceLocation, NodeProgress> progress = data.getAllProgress();
         Map<ResourceLocation, Integer> invested = data.getAllInvested();
 
         PacketDistributor.sendToPlayer(player,
-                new ResearchSyncPayload(data.getPoints(), order, progress, invested));
+                new ResearchSyncPayload(data.getPoints(), order, progress, invested, redeemResult));
     }
 
     private static ResearchPlayerData getPlayerData(ServerPlayer player) {

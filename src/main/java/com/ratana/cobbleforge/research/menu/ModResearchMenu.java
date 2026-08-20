@@ -1,6 +1,7 @@
 package com.ratana.cobbleforge.research.menu;
 
 import com.ratana.cobbleforge.CobbleForgeMod;
+import com.ratana.cobbleforge.research.network.ResearchSyncPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
@@ -33,37 +34,35 @@ public class ModResearchMenu extends AbstractContainerMenu {
     private final Player player;
     private final ContainerLevelAccess access;
 
-    /** Backing container for the 4 shared slots. Server-side, this is the real
-     *  ResearchTableBlockEntity (persists to disk, survives GUI close). Client-side / menu-type
-     *  factory construction has no block entity available, so it falls back to a throwaway
-     *  SimpleContainer purely so slot construction doesn't NPE — its contents are never
-     *  authoritative and get overwritten by vanilla's client-side slot sync from the server. */
     private final Container inputContainer;
 
-    /** Authoritative on the server; mirrored to the client via vanilla menu sync (no custom
-     *  packet needed — treat it like any other piece of menu state, e.g. via a data slot, since
-     *  it gates rendering/interaction and the client needs to know it promptly). For now this
-     *  is a plain field the client optimistically sets locally on view-switch, exactly as
-     *  discussed — the client isn't gated on the server round-trip for this since it's cosmetic. */
     private final ContainerData viewData;
     private static final int DATA_VIEW = 0;
 
-    // ---- client-side display cache, populated by ResearchSyncPayload via applySync() ----
+    private ResearchSyncPayload.RedeemResult lastRedeemResult;
+
+    public void setLastRedeemResult(ResearchSyncPayload.RedeemResult result) {
+        this.lastRedeemResult = result;
+    }
+
+    public ResearchSyncPayload.RedeemResult getLastRedeemResult() {
+        return lastRedeemResult;
+    }
+
+    public void clearLastRedeemResult() {
+        this.lastRedeemResult = null;
+    }
+
     private int cachedPoints = 0;
     private List<ResourceLocation> cachedSlotOrder = List.of();
     private final Map<ResourceLocation, NodeProgress> cachedProgress = new HashMap<>();
     private final Map<ResourceLocation, Integer> cachedInvested = new HashMap<>();
 
-    /** Client-side / menu-type-factory constructor — no real block entity available yet at
-     *  this point in the open sequence, so a scratch container stands in until vanilla's slot
-     *  sync populates it with server truth. */
     public ModResearchMenu(int containerId, Inventory playerInventory) {
         this(containerId, playerInventory, ContainerLevelAccess.NULL,
                 new SimpleContainer(INPUT_SLOT_COUNT));
     }
 
-    /** Server-side constructor — used by ResearchTableBlock with the real block entity's
-     *  container, so slots read/write directly into persisted, block-owned state. */
     public ModResearchMenu(int containerId, Inventory playerInventory, ContainerLevelAccess access,
                            Container inputContainer) {
         super(ModMenuTypes.RESEARCH_TABLE.get(), containerId);
@@ -161,6 +160,14 @@ public class ModResearchMenu extends AbstractContainerMenu {
         // Only valid journals can ever occupy this slot (mayPlace already enforces that), so
         // non-empty is a sufficient check here — no need to re-run isResearchJournal client-side.
         return !getSlot(SLOT_JOURNAL).getItem().isEmpty();
+    }
+
+    public boolean hasAncientItemClient() {
+        return !getSlot(SLOT_ANCIENT_ITEM).getItem().isEmpty();
+    }
+
+    public boolean hasBrushClient() {
+        return !getSlot(SLOT_BRUSH).getItem().isEmpty();
     }
 
     // ---------------- vanilla container plumbing ----------------
