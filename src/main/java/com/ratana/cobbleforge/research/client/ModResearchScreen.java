@@ -3,6 +3,7 @@ package com.ratana.cobbleforge.research.client;
 import com.ratana.cobbleforge.research.menu.ModResearchMenu;
 import com.ratana.cobbleforge.research.network.ResearchActionPayload;
 import com.ratana.cobbleforge.research.network.ResearchRedeemPayload;
+import com.ratana.cobbleforge.research.network.ResearchSyncPayload;
 import com.ratana.cobbleforge.research.network.ResearchViewPayload;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.NodeSlotLayout;
@@ -48,6 +49,9 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
 
     private static final ResourceLocation POINTS_ICON =
             ResourceLocation.fromNamespaceAndPath("cobbleforge", "textures/gui/icon/research_points.png");
+    private static final ResourceLocation SLOT_TEXTURE =
+            ResourceLocation.fromNamespaceAndPath("cobbleforge", "textures/gui/slot.png");
+
 
     private static final int COLOR_NIGHT_SKY = 0xFF120B2E;
     private static final int COLOR_LEATHER_TRIM = 0xFF6B4423;
@@ -190,11 +194,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         }
     }
 
-    /**
-     * Redeem-screen background. The 4 shared slots are real active Slots on the menu, drawn
-     * automatically by AbstractContainerScreen's base render loop — this only owns background
-     * art and the title label.
-     */
     private void renderRedeemBg(GuiGraphics graphics) {
         int x = leftPos, y = topPos;
 
@@ -202,7 +201,31 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         renderParchmentShading(graphics, x, y);
         renderTomeFrame(graphics, x, y);
 
+        // Shared slot backgrounds — coordinates MUST match ModResearchMenu's ConditionalSlot
+        // positions exactly, since nothing ties these two together automatically.
+        renderSlotBackground(graphics, x + 12, y + 92);
+        renderSlotBackground(graphics, x + 12, y + 120);
+        renderSlotBackground(graphics, x + 206, y + 92);
+        renderSlotBackground(graphics, x + 206, y + 120);
+
+        // Player inventory backgrounds
+        int inventoryLeft = x + (imageWidth - 162) / 2;
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 9; col++) {
+                renderSlotBackground(graphics, inventoryLeft + col * 18, y + 160 + row * 18);
+            }
+        }
+        for (int col = 0; col < 9; col++) {
+            renderSlotBackground(graphics, inventoryLeft + col * 18, y + 160 + 58);
+        }
+
         drawCenteredNoShadow(graphics, "Redeem", x + imageWidth / 2, y + 10, COLOR_INK_HEADER);
+
+        ResearchSyncPayload.RedeemResult result = menu.getLastRedeemResult();
+        if (result != null) {
+            String text = redeemResultText(result);
+            drawCenteredNoShadow(graphics, text, x + imageWidth / 2, y + imageHeight / 2 - 25, COLOR_INK_HEADER);
+        }
     }
 
     private void renderUnavailableDetail(GuiGraphics graphics, ResearchNodeDefinition def) {
@@ -350,6 +373,10 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
     private void drawCenteredNoShadow(GuiGraphics graphics, String text, int centerX, int y, int color) {
         int width = font.width(text);
         graphics.drawString(font, text, centerX - width / 2, y, color, false);
+    }
+
+    private void renderSlotBackground(GuiGraphics graphics, int x, int y) {
+        graphics.blit(SLOT_TEXTURE, x - 1, y - 1, 0, 0, 18, 18, 18, 18);
     }
 
     private static int lerpWhiteToGold(double fraction) {
@@ -688,11 +715,25 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         rebuildRedeemWidgets();
     }
 
+    private String redeemResultText(ResearchSyncPayload.RedeemResult result) {
+        if (result.wasFallback()) {
+            return result.amount() + " points (no eligible target)";
+        }
+        String label = result.nodeId()
+                .map(id -> {
+                    NodeProgress progress = menu.getCachedProgress(id);
+                    return progress == NodeProgress.LOCKED ? "???" : capitalize(id.getPath());
+                })
+                .orElse("???");
+        return result.amount() + " points towards " + label;
+    }
+
     private void closeRedeem() {
         removeRedeemWidgets();
         viewState = ViewState.STAR_FIELD;
         PacketDistributor.sendToServer(new ResearchViewPayload(false));
         menu.setView(ModResearchMenu.MenuView.EXPLORE);
+        menu.clearLastRedeemResult();
         panX = 0f;
         panY = 0f;
         addRedeemEntryButton();
@@ -708,8 +749,7 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         addRenderableWidget(backButton);
 
         int bw = 100, bh = 20;
-        int bx = x + (imageWidth - bw) / 2, by = y + imageHeight - 34;
-
+        int bx = x + (imageWidth - bw) / 2, by = y + 115; // above the inventory, which starts at y+160
         redeemConfirmButton = Button.builder(Component.literal("Redeem"), btn -> startRedeem())
                 .bounds(bx, by, bw, bh)
                 .build();

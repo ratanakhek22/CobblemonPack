@@ -29,6 +29,8 @@ public class ModResearchMenu extends AbstractContainerMenu {
     public static final int SLOT_JOURNAL = 3;
     private static final int INPUT_SLOT_COUNT = 4;
 
+    private static final int PANEL_WIDTH = 236;
+
     public enum MenuView { EXPLORE, REDEEM }
 
     private final Player player;
@@ -76,12 +78,13 @@ public class ModResearchMenu extends AbstractContainerMenu {
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isAncientItem));
         this.addSlot(new ConditionalSlot(inputContainer, SLOT_BRUSH, 12, 120,
                 () -> getView() == MenuView.REDEEM, stack -> stack.is(Items.BRUSH)));
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 152, 92,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 206, 92,
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isForgottenKnowledge));
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_JOURNAL, 152, 120,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_JOURNAL, 206, 120,
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isResearchJournal));
 
-        layoutPlayerInventorySlots(playerInventory, 8, 160);
+        int inventoryLeft = (PANEL_WIDTH  - 162) / 2; // 162 = 9 columns * 18px, standard vanilla inventory width
+        layoutPlayerInventorySlots(playerInventory, inventoryLeft, 160);
     }
 
     private void layoutPlayerInventorySlots(Inventory inv, int left, int top) {
