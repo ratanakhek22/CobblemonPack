@@ -1,6 +1,6 @@
 package com.ratana.cobbleforge.research.menu;
 
-import com.ratana.cobbleforge.CobbleForgeMod;
+import static com.ratana.cobbleforge.research.ResearchConstants.PANEL_WIDTH;
 import com.ratana.cobbleforge.research.network.ResearchSyncPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Container;
@@ -29,7 +29,14 @@ public class ModResearchMenu extends AbstractContainerMenu {
     public static final int SLOT_JOURNAL = 3;
     private static final int INPUT_SLOT_COUNT = 4;
 
-    private static final int PANEL_WIDTH = 236;
+    // Shared slot positions
+    private static final int ANCIENT_ITEM_X = 12, ANCIENT_ITEM_Y = 92;
+    private static final int BRUSH_X = 12, BRUSH_Y = 120;
+    private static final int FORGOTTEN_KNOWLEDGE_X = 206, FORGOTTEN_KNOWLEDGE_Y = 92;
+    private static final int JOURNAL_X = 206, JOURNAL_Y = 120;
+
+    // Player inventory origin (top-left of the 3x9 grid; hotbar sits 58px below this)
+    private static final int INVENTORY_TOP = 160;
 
     public enum MenuView { EXPLORE, REDEEM }
 
@@ -74,17 +81,36 @@ public class ModResearchMenu extends AbstractContainerMenu {
         this.viewData = new SimpleContainerData(1);
         addDataSlots(viewData);
 
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_ANCIENT_ITEM, 12, 92,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_ANCIENT_ITEM, ANCIENT_ITEM_X, ANCIENT_ITEM_Y,
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isAncientItem));
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_BRUSH, 12, 120,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_BRUSH, BRUSH_X, BRUSH_Y,
                 () -> getView() == MenuView.REDEEM, stack -> stack.is(Items.BRUSH)));
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 206, 92,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, FORGOTTEN_KNOWLEDGE_X, FORGOTTEN_KNOWLEDGE_Y,
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isForgottenKnowledge));
-        this.addSlot(new ConditionalSlot(inputContainer, SLOT_JOURNAL, 206, 120,
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_JOURNAL, JOURNAL_X, JOURNAL_Y,
                 () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isResearchJournal));
 
-        int inventoryLeft = (PANEL_WIDTH  - 162) / 2; // 162 = 9 columns * 18px, standard vanilla inventory width
-        layoutPlayerInventorySlots(playerInventory, inventoryLeft, 160);
+        int inventoryLeft = (PANEL_WIDTH - 162) / 2;
+        layoutPlayerInventorySlots(playerInventory, inventoryLeft, INVENTORY_TOP);
+    }
+
+    public record SlotPos(int x, int y) {}
+
+    public List<SlotPos> getSharedSlotPositions() {
+        return List.of(
+                new SlotPos(ANCIENT_ITEM_X, ANCIENT_ITEM_Y),
+                new SlotPos(BRUSH_X, BRUSH_Y),
+                new SlotPos(FORGOTTEN_KNOWLEDGE_X, FORGOTTEN_KNOWLEDGE_Y),
+                new SlotPos(JOURNAL_X, JOURNAL_Y)
+        );
+    }
+
+    public int getInventoryLeft() {
+        return (PANEL_WIDTH - 162) / 2;
+    }
+
+    public int getInventoryTop() {
+        return INVENTORY_TOP;
     }
 
     private void layoutPlayerInventorySlots(Inventory inv, int left, int top) {
@@ -115,20 +141,6 @@ public class ModResearchMenu extends AbstractContainerMenu {
      *  it directly for the optimistic local flip. */
     public void setView(MenuView view) {
         viewData.set(DATA_VIEW, view == MenuView.REDEEM ? 1 : 0);
-    }
-
-    // ---------------- slot validity (moved from the old inline inputContainer) ----------------
-
-    private static boolean isAncientItem(ItemStack stack) {
-        return ResearchTableBlockEntity.isAncientItem(stack);
-    }
-
-    private static boolean isForgottenKnowledge(ItemStack stack) {
-        return ResearchTableBlockEntity.isForgottenKnowledge(stack);
-    }
-
-    private static boolean isResearchJournal(ItemStack stack) {
-        return ResearchTableBlockEntity.isResearchJournal(stack);
     }
 
     // ---------------- client-side cache access (used by ModResearchScreen) ----------------
@@ -192,13 +204,13 @@ public class ModResearchMenu extends AbstractContainerMenu {
             // shift-click from EXPLORE would silently place an item into a slot the player
             // can't currently see or interact with, which we flagged earlier as a real bug.
             if (getView() == MenuView.REDEEM) {
-                if (isAncientItem(copy)) {
+                if (ResearchTableBlockEntity.isAncientItem(copy)) {
                     movedToTable = moveItemStackTo(original, SLOT_ANCIENT_ITEM, SLOT_ANCIENT_ITEM + 1, false);
                 } else if (copy.is(Items.BRUSH)) {
                     movedToTable = moveItemStackTo(original, SLOT_BRUSH, SLOT_BRUSH + 1, false);
-                } else if (isForgottenKnowledge(copy)) {
+                } else if (ResearchTableBlockEntity.isForgottenKnowledge(copy)) {
                     movedToTable = moveItemStackTo(original, SLOT_FORGOTTEN_KNOWLEDGE, SLOT_FORGOTTEN_KNOWLEDGE + 1, false);
-                } else if (isResearchJournal(copy)) {
+                } else if (ResearchTableBlockEntity.isResearchJournal(copy)) {
                     movedToTable = moveItemStackTo(original, SLOT_JOURNAL, SLOT_JOURNAL + 1, false);
                 }
             }

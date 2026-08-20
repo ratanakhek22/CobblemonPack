@@ -5,10 +5,12 @@ import com.ratana.cobbleforge.research.client.ClientResearchSync;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
 import com.ratana.cobbleforge.research.node.TypeGroup;
-import com.ratana.cobbleforge.research.node.TypeGroupRegistry;
 import com.ratana.cobbleforge.research.player.ModAttachments;
 import com.ratana.cobbleforge.research.player.NodeProgress;
 import com.ratana.cobbleforge.research.player.ResearchPlayerData;
+import static com.ratana.cobbleforge.research.ResearchConstants.INVESTMENT_INCREMENT;
+import static com.ratana.cobbleforge.research.ResearchConstants.NO_TARGET_FALLBACK_POINTS;
+import static com.ratana.cobbleforge.research.ResearchConstants.ANCIENT_ITEM_DISCOUNT;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,18 +29,6 @@ import java.util.Random;
 @EventBusSubscriber(modid = "cobbleforge")
 public final class ResearchNetworking {
     private ResearchNetworking() {}
-
-    /**
-     * Flat cost per "research deeper" click, everywhere, regardless of node or stage.
-     * MUST match the client's ModResearchScreen.INVESTMENT_INCREMENT exactly, or the button's
-     * displayed cost lies about what actually gets charged. Right now that's two independent
-     * hardcoded 10s in two files — worth pulling into one shared constant (e.g. a static field
-     * on ResearchActionPayload, since that's common-side and both client and server already
-     * depend on it) once you're back in here, rather than trusting two copies to stay in sync.
-     */
-    private static final int INVESTMENT_INCREMENT = 10;
-    private static final int ANCIENT_ITEM_DISCOUNT = 10;
-    private static final int NO_TARGET_FALLBACK_POINTS = 4;
 
     private static Optional<ResourceLocation> pickEligibleTarget(
             com.ratana.cobbleforge.research.node.TypeGroup group, ResearchPlayerData data,

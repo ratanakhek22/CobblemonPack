@@ -1,5 +1,6 @@
 package com.ratana.cobbleforge.research.client;
 
+import com.ratana.cobbleforge.research.ResearchConstants;
 import com.ratana.cobbleforge.research.menu.ModResearchMenu;
 import com.ratana.cobbleforge.research.network.ResearchActionPayload;
 import com.ratana.cobbleforge.research.network.ResearchRedeemPayload;
@@ -42,7 +43,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
     private static final int STAR_SIZE = 6;
     private static final int FIELD_RADIUS = 70;
 
-    private static final int INVESTMENT_INCREMENT = 10;
     private static final long INVEST_DELAY_MS = 600;
 
     private static final ItemStack FALLBACK_SPRITE_STACK = new ItemStack(net.minecraft.world.item.Items.BARRIER);
@@ -156,7 +156,7 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         NodeProgress progress = menu.getCachedProgress(nodeId);
         DetailSections sections = buildDetailSections(def, progress);
 
-        String titleText = sections.identityRevealed ? capitalize(def.speciesId().getPath()) : "???";
+        String titleText = sections.identityRevealed ? ResearchConstants.capitalize(def.speciesId().getPath()) : "???";
         drawCenteredNoShadow(graphics, titleText, x + imageWidth / 2, y + 10, COLOR_INK_HEADER);
 
         int contentTop = y + 26;
@@ -201,22 +201,19 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         renderParchmentShading(graphics, x, y);
         renderTomeFrame(graphics, x, y);
 
-        // Shared slot backgrounds — coordinates MUST match ModResearchMenu's ConditionalSlot
-        // positions exactly, since nothing ties these two together automatically.
-        renderSlotBackground(graphics, x + 12, y + 92);
-        renderSlotBackground(graphics, x + 12, y + 120);
-        renderSlotBackground(graphics, x + 206, y + 92);
-        renderSlotBackground(graphics, x + 206, y + 120);
+        for (ModResearchMenu.SlotPos pos : menu.getSharedSlotPositions()) {
+            renderSlotBackground(graphics, x + pos.x(), y + pos.y());
+        }
 
-        // Player inventory backgrounds
-        int inventoryLeft = x + (imageWidth - 162) / 2;
+        int inventoryLeft = x + menu.getInventoryLeft();
+        int inventoryTop = y + menu.getInventoryTop();
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                renderSlotBackground(graphics, inventoryLeft + col * 18, y + 160 + row * 18);
+                renderSlotBackground(graphics, inventoryLeft + col * 18, inventoryTop + row * 18);
             }
         }
         for (int col = 0; col < 9; col++) {
-            renderSlotBackground(graphics, inventoryLeft + col * 18, y + 160 + 58);
+            renderSlotBackground(graphics, inventoryLeft + col * 18, inventoryTop + 58);
         }
 
         drawCenteredNoShadow(graphics, "Redeem", x + imageWidth / 2, y + 10, COLOR_INK_HEADER);
@@ -388,19 +385,6 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
 
     private static int lerpChannel(int from, int to, double fraction) {
         return from + (int) Math.round((to - from) * fraction);
-    }
-
-    /** "mr_mime" -> "Mr Mime". Guessing your species paths use underscores as word separators —
-     *  adjust the split character if that's wrong for your actual node data. */
-    private static String capitalize(String path) {
-        String[] parts = path.split("_");
-        StringBuilder sb = new StringBuilder();
-        for (String part : parts) {
-            if (part.isEmpty()) continue;
-            if (!sb.isEmpty()) sb.append(' ');
-            sb.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1));
-        }
-        return sb.toString();
     }
 
     private static ResearchNodeDefinition lookupDefinition(ResourceLocation nodeId) {
@@ -624,11 +608,11 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
 
         boolean pending = isInvestPending();
         boolean journalPresent = menu.hasJournalClient();
-        boolean affordable = menu.getCachedPoints() >= INVESTMENT_INCREMENT;
+        boolean affordable = menu.getCachedPoints() >= ResearchConstants.INVESTMENT_INCREMENT;
 
         Component label = pending
                 ? Component.literal("Researching" + spinnerDots())
-                : Component.literal("Research Deeper (" + INVESTMENT_INCREMENT + ")");
+                : Component.literal("Research Deeper (" + ResearchConstants.INVESTMENT_INCREMENT + ")");
 
         actionButton = Button.builder(label, btn -> startInvestment(detailNodeId))
                 .bounds(bx, by, halfWidth, bh)
@@ -722,7 +706,7 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         String label = result.nodeId()
                 .map(id -> {
                     NodeProgress progress = menu.getCachedProgress(id);
-                    return progress == NodeProgress.LOCKED ? "???" : capitalize(id.getPath());
+                    return progress == NodeProgress.LOCKED ? "???" : ResearchConstants.capitalize(id.getPath());
                 })
                 .orElse("???");
         return result.amount() + " points towards " + label;
@@ -822,7 +806,7 @@ public class ModResearchScreen extends AbstractContainerScreen<ModResearchMenu> 
         @Override
         public List<Component> buildTooltip(ResearchNodeDefinition def, NodeProgress progress, int invested) {
             List<Component> lines = new ArrayList<>();
-            lines.add(Component.literal(progress == NodeProgress.LOCKED ? "???" : capitalize(def.speciesId().getPath())));
+            lines.add(Component.literal(progress == NodeProgress.LOCKED ? "???" : ResearchConstants.capitalize(def.speciesId().getPath())));
             lines.add(Component.literal(stageLabel(progress)));
             lines.add(Component.literal("Invested: " + invested));
             return lines;
