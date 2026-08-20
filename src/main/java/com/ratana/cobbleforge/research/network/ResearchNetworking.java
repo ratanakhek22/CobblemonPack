@@ -4,6 +4,8 @@ import com.ratana.cobbleforge.research.block.entity.ResearchTableBlockEntity;
 import com.ratana.cobbleforge.research.client.ClientResearchSync;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
+import com.ratana.cobbleforge.research.node.TypeGroup;
+import com.ratana.cobbleforge.research.node.TypeGroupRegistry;
 import com.ratana.cobbleforge.research.player.ModAttachments;
 import com.ratana.cobbleforge.research.player.NodeProgress;
 import com.ratana.cobbleforge.research.player.ResearchPlayerData;
@@ -18,6 +20,8 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Random;
 
 @EventBusSubscriber(modid = "cobbleforge")
 public final class ResearchNetworking {
@@ -32,6 +36,20 @@ public final class ResearchNetworking {
      * depend on it) once you're back in here, rather than trusting two copies to stay in sync.
      */
     private static final int INVESTMENT_INCREMENT = 10;
+    private static final int ANCIENT_ITEM_DISCOUNT = 10;
+
+    private static Optional<ResourceLocation> pickEligibleTarget(TypeGroup group, ResearchPlayerData data,
+                                                                 Map<ResourceLocation, ResearchNodeDefinition> defs,
+                                                                 Random random) {
+        List<ResourceLocation> eligible = TypeGroupRegistry.membersOf(group).stream()
+                .filter(id -> {
+                    ResearchNodeDefinition def = defs.get(id);
+                    return def != null && data.getPointsInvested(id) < def.totalCost();
+                })
+                .toList();
+        if (eligible.isEmpty()) return Optional.empty();
+        return Optional.of(eligible.get(random.nextInt(eligible.size())));
+    }
 
     @SubscribeEvent
     static void register(RegisterPayloadHandlersEvent event) {

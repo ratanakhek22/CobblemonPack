@@ -2,6 +2,8 @@ package com.ratana.cobbleforge.research.block.entity;
 
 import com.ratana.cobbleforge.CobbleForgeMod;
 import com.ratana.cobbleforge.research.block.ModBlocks;
+import com.ratana.cobbleforge.research.item.AncientItem;
+import com.ratana.cobbleforge.research.node.TypeGroup;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
@@ -43,8 +45,12 @@ public class ResearchTableBlockEntity extends BlockEntity implements Container {
         };
     }
 
+    public static TypeGroup ancientItemGroup(ItemStack stack) {
+        return stack.getItem() instanceof AncientItem ai ? ai.group() : null;
+    }
+
     public static boolean isAncientItem(ItemStack stack) {
-        return false;
+        return stack.getItem() instanceof AncientItem;
     }
 
     public static boolean isForgottenKnowledge(ItemStack stack) {

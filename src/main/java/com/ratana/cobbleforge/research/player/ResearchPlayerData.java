@@ -194,4 +194,15 @@ public class ResearchPlayerData {
         }
         return true;
     }
+
+    public void creditInvestedCapped(ResourceLocation speciesId, ResearchNodeDefinition def, int amount) {
+        int current = getPointsInvested(speciesId);
+        int capped = Math.min(current + amount, def.totalCost());
+        pointsInvested.put(speciesId, capped);
+
+        NodeProgress computed = def.progressForInvested(capped);
+        if (computed.ordinal() > getProgress(speciesId).ordinal()) {
+            progress.put(speciesId, computed);
+        }
+    }
 }

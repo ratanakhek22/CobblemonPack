@@ -1,5 +1,11 @@
 {
   "item.cobbleforge.forgotten_knowledge": "Forgotten Knowledge",
+  "item.cobbleforge.ancient_amber": "Ancient Amber",
+  "item.cobbleforge.ancient_geode": "Ancient Geode",
+  "item.cobbleforge.ancient_seed": "Ancient Seed",
+  "item.cobbleforge.ancient_tome": "Ancient Tome",
+  "item.cobbleforge.ancient_totem": "Ancient Totem",
+  "item.cobbleforge.ancient_prismarine": "Ancient Prismarine",
   "block.cobbleforge.ruin_block": "Ruin Block",
   "block.cobbleforge.research_table": "Research Table"
 }

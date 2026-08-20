@@ -1,5 +1,8 @@
 package com.ratana.cobbleforge;
 
+import com.ratana.cobbleforge.research.item.AncientItem;
+import com.ratana.cobbleforge.research.node.TypeGroup;
+import com.ratana.cobbleforge.research.node.TypeGroupRegistry;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
@@ -46,6 +49,31 @@ public class CobbleForgeMod {
             "research_table", ModBlocks.RESEARCH_TABLE
     );
 
+    public static final DeferredItem<AncientItem> ANCIENT_GEODE = ITEMS.register(
+            "ancient_geode",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.STEEL_ROCK_GROUND)
+    );
+    public static final DeferredItem<AncientItem> ANCIENT_PRISMARINE = ITEMS.register(
+            "ancient_prismarine",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.WATER_ICE_ELECTRIC)
+    );
+    public static final DeferredItem<AncientItem> ANCIENT_SEED = ITEMS.register(
+            "ancient_seed",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.GRASS_BUG_POISON)
+    );
+    public static final DeferredItem<AncientItem> ANCIENT_AMBER = ITEMS.register(
+            "ancient_amber",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.DRAGON_FAIRY_FIRE)
+    );
+    public static final DeferredItem<AncientItem> ANCIENT_TOME = ITEMS.register(
+            "ancient_tome",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.GHOST_DARK_PSYCHIC)
+    );
+    public static final DeferredItem<AncientItem> ANCIENT_TOTEM = ITEMS.register(
+            "ancient_totem",
+            () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.FLYING_FIGHTING_NORMAL)
+    );
+
     public CobbleForgeMod(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
@@ -59,6 +87,7 @@ public class CobbleForgeMod {
 
     private void commonSetup(FMLCommonSetupEvent event) {
         ModResearchNodes.bootstrap();
+        TypeGroupRegistry.bootstrap(ModResearchNodes.all().values());
         ResearchPointHooks.register();
     }
 }
