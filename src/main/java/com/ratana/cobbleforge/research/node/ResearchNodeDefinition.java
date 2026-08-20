@@ -62,4 +62,21 @@ public record ResearchNodeDefinition(
             case SACRIFICE_INFO -> NodeProgress.READY_FOR_SACRIFICE;
         };
     }
+
+    /**
+     * Points still needed to clear the next unpaid stage, given a cumulative invested amount.
+     * Returns 0 if fully unlocked already (nothing left to buy). Walks the same cumulative-cost
+     * logic as progressForInvested, just stops at the first stage boundary not yet crossed
+     * instead of returning a NodeProgress.
+     */
+    public int remainingForNextStage(int invested) {
+        int cumulative = 0;
+        for (NodeStage stage : stages) {
+            cumulative += costForStage(stage);
+            if (invested < cumulative) {
+                return cumulative - invested;
+            }
+        }
+        return 0;
+    }
 }

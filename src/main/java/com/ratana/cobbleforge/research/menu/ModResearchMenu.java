@@ -1,42 +1,52 @@
 package com.ratana.cobbleforge.research.menu;
 
-import com.ratana.cobbleforge.research.block.ModBlocks;
-import com.ratana.cobbleforge.research.player.NodeProgress;
+import com.ratana.cobbleforge.CobbleForgeMod;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerLevelAccess;
-import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.*;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import org.jetbrains.annotations.NotNull;
 
+import com.ratana.cobbleforge.research.block.ModBlocks;
+import com.ratana.cobbleforge.research.block.entity.ResearchTableBlockEntity;
+import com.ratana.cobbleforge.research.player.NodeProgress;
+
+import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 public class ModResearchMenu extends AbstractContainerMenu {
 
     public static final int SLOT_ANCIENT_ITEM = 0;
     public static final int SLOT_BRUSH = 1;
     public static final int SLOT_FORGOTTEN_KNOWLEDGE = 2;
-    private static final int INPUT_SLOT_COUNT = 3;
+    public static final int SLOT_JOURNAL = 3;
+    private static final int INPUT_SLOT_COUNT = 4;
+
+    public enum MenuView { EXPLORE, REDEEM }
 
     private final Player player;
     private final ContainerLevelAccess access;
-    private final SimpleContainer inputContainer = new SimpleContainer(INPUT_SLOT_COUNT) {
-        @Override
-        public boolean canPlaceItem(int slot, @NotNull ItemStack stack) {
-            return switch (slot) {
-                case SLOT_ANCIENT_ITEM -> isAncientItem(stack);
-                case SLOT_BRUSH -> stack.is(Items.BRUSH);
-                case SLOT_FORGOTTEN_KNOWLEDGE -> isForgottenKnowledge(stack);
-                default -> false;
-            };
-        }
-    };
+
+    /** Backing container for the 4 shared slots. Server-side, this is the real
+     *  ResearchTableBlockEntity (persists to disk, survives GUI close). Client-side / menu-type
+     *  factory construction has no block entity available, so it falls back to a throwaway
+     *  SimpleContainer purely so slot construction doesn't NPE — its contents are never
+     *  authoritative and get overwritten by vanilla's client-side slot sync from the server. */
+    private final Container inputContainer;
+
+    /** Authoritative on the server; mirrored to the client via vanilla menu sync (no custom
+     *  packet needed — treat it like any other piece of menu state, e.g. via a data slot, since
+     *  it gates rendering/interaction and the client needs to know it promptly). For now this
+     *  is a plain field the client optimistically sets locally on view-switch, exactly as
+     *  discussed — the client isn't gated on the server round-trip for this since it's cosmetic. */
+    private final ContainerData viewData;
+    private static final int DATA_VIEW = 0;
 
     // ---- client-side display cache, populated by ResearchSyncPayload via applySync() ----
     private int cachedPoints = 0;
@@ -44,35 +54,33 @@ public class ModResearchMenu extends AbstractContainerMenu {
     private final Map<ResourceLocation, NodeProgress> cachedProgress = new HashMap<>();
     private final Map<ResourceLocation, Integer> cachedInvested = new HashMap<>();
 
-    /** Client-side / menu-type-factory constructor — no real block position available. */
+    /** Client-side / menu-type-factory constructor — no real block entity available yet at
+     *  this point in the open sequence, so a scratch container stands in until vanilla's slot
+     *  sync populates it with server truth. */
     public ModResearchMenu(int containerId, Inventory playerInventory) {
-        this(containerId, playerInventory, ContainerLevelAccess.NULL);
+        this(containerId, playerInventory, ContainerLevelAccess.NULL,
+                new SimpleContainer(INPUT_SLOT_COUNT));
     }
 
-    /** Server-side constructor — used by ResearchTableBlock with the real block's position. */
-    public ModResearchMenu(int containerId, Inventory playerInventory, ContainerLevelAccess access) {
+    /** Server-side constructor — used by ResearchTableBlock with the real block entity's
+     *  container, so slots read/write directly into persisted, block-owned state. */
+    public ModResearchMenu(int containerId, Inventory playerInventory, ContainerLevelAccess access,
+                           Container inputContainer) {
         super(ModMenuTypes.RESEARCH_TABLE.get(), containerId);
         this.player = playerInventory.player;
         this.access = access;
+        this.inputContainer = inputContainer;
+        this.viewData = new SimpleContainerData(1);
+        addDataSlots(viewData);
 
-        this.addSlot(new Slot(inputContainer, SLOT_ANCIENT_ITEM, 12, 92) {
-            @Override
-            public boolean mayPlace(@NotNull ItemStack stack) {
-                return inputContainer.canPlaceItem(SLOT_ANCIENT_ITEM, stack);
-            }
-        });
-        this.addSlot(new Slot(inputContainer, SLOT_BRUSH, 12, 120) {
-            @Override
-            public boolean mayPlace(@NotNull ItemStack stack) {
-                return inputContainer.canPlaceItem(SLOT_BRUSH, stack);
-            }
-        });
-        this.addSlot(new Slot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 152, 92) {
-            @Override
-            public boolean mayPlace(@NotNull ItemStack stack) {
-                return inputContainer.canPlaceItem(SLOT_FORGOTTEN_KNOWLEDGE, stack);
-            }
-        });
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_ANCIENT_ITEM, 12, 92,
+                () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isAncientItem));
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_BRUSH, 12, 120,
+                () -> getView() == MenuView.REDEEM, stack -> stack.is(Items.BRUSH)));
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_FORGOTTEN_KNOWLEDGE, 152, 92,
+                () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isForgottenKnowledge));
+        this.addSlot(new ConditionalSlot(inputContainer, SLOT_JOURNAL, 152, 120,
+                () -> getView() == MenuView.REDEEM, ResearchTableBlockEntity::isResearchJournal));
 
         layoutPlayerInventorySlots(playerInventory, 8, 160);
     }
@@ -80,22 +88,45 @@ public class ModResearchMenu extends AbstractContainerMenu {
     private void layoutPlayerInventorySlots(Inventory inv, int left, int top) {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(inv, col + row * 9 + 9, left + col * 18, top + row * 18));
+                addSlot(new ConditionalSlot(inv, col + row * 9 + 9, left + col * 18, top + row * 18,
+                        () -> getView() == MenuView.REDEEM, stack -> true));
             }
         }
         for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(inv, col, left + col * 18, top + 58));
+            addSlot(new ConditionalSlot(inv, col, left + col * 18, top + 58,
+                    () -> getView() == MenuView.REDEEM, stack -> true));
         }
     }
 
+    public ResearchTableBlockEntity getBlockEntity() {
+        return inputContainer instanceof ResearchTableBlockEntity be ? be : null;
+    }
+
+    // ---------------- view state ----------------
+
+    public MenuView getView() {
+        return viewData.get(DATA_VIEW) == 1 ? MenuView.REDEEM : MenuView.EXPLORE;
+    }
+
+    /** Server calls this in response to the view-switch packet (not written yet — same
+     *  ResearchActionPayload pattern as INVEST, per our earlier discussion). Client-side, call
+     *  it directly for the optimistic local flip. */
+    public void setView(MenuView view) {
+        viewData.set(DATA_VIEW, view == MenuView.REDEEM ? 1 : 0);
+    }
+
+    // ---------------- slot validity (moved from the old inline inputContainer) ----------------
+
     private static boolean isAncientItem(ItemStack stack) {
-        // TODO point at your actual Ancient Geode/Prismarine/Seed/Amber/Tome/Totem items
-        return false;
+        return ResearchTableBlockEntity.isAncientItem(stack);
     }
 
     private static boolean isForgottenKnowledge(ItemStack stack) {
-        // TODO point at your actual Forgotten Knowledge item
-        return false;
+        return ResearchTableBlockEntity.isForgottenKnowledge(stack);
+    }
+
+    private static boolean isResearchJournal(ItemStack stack) {
+        return ResearchTableBlockEntity.isResearchJournal(stack);
     }
 
     // ---------------- client-side cache access (used by ModResearchScreen) ----------------
@@ -122,6 +153,16 @@ public class ModResearchMenu extends AbstractContainerMenu {
         return cachedInvested.getOrDefault(nodeId, 0);
     }
 
+    public int getForgottenKnowledgeCount() {
+        return getSlot(SLOT_FORGOTTEN_KNOWLEDGE).getItem().getCount();
+    }
+
+    public boolean hasJournalClient() {
+        // Only valid journals can ever occupy this slot (mayPlace already enforces that), so
+        // non-empty is a sufficient check here — no need to re-run isResearchJournal client-side.
+        return !getSlot(SLOT_JOURNAL).getItem().isEmpty();
+    }
+
     // ---------------- vanilla container plumbing ----------------
 
     @Override
@@ -135,28 +176,30 @@ public class ModResearchMenu extends AbstractContainerMenu {
         if (index < INPUT_SLOT_COUNT) {
             if (!moveItemStackTo(original, INPUT_SLOT_COUNT, slots.size(), true)) return ItemStack.EMPTY;
         } else {
-            // Moving FROM the player TO your machine
             boolean movedToTable = false;
 
-            if (isAncientItem(copy)) {
-                movedToTable = moveItemStackTo(original, SLOT_ANCIENT_ITEM, SLOT_ANCIENT_ITEM + 1, false);
-            } else if (copy.is(Items.BRUSH)) {
-                movedToTable = moveItemStackTo(original, SLOT_BRUSH, SLOT_BRUSH + 1, false);
-            } else if (isForgottenKnowledge(copy)) {
-                movedToTable = moveItemStackTo(original, SLOT_FORGOTTEN_KNOWLEDGE, SLOT_FORGOTTEN_KNOWLEDGE + 1, false);
+            // Only route into the shared slots while REDEEM is actually open — otherwise a
+            // shift-click from EXPLORE would silently place an item into a slot the player
+            // can't currently see or interact with, which we flagged earlier as a real bug.
+            if (getView() == MenuView.REDEEM) {
+                if (isAncientItem(copy)) {
+                    movedToTable = moveItemStackTo(original, SLOT_ANCIENT_ITEM, SLOT_ANCIENT_ITEM + 1, false);
+                } else if (copy.is(Items.BRUSH)) {
+                    movedToTable = moveItemStackTo(original, SLOT_BRUSH, SLOT_BRUSH + 1, false);
+                } else if (isForgottenKnowledge(copy)) {
+                    movedToTable = moveItemStackTo(original, SLOT_FORGOTTEN_KNOWLEDGE, SLOT_FORGOTTEN_KNOWLEDGE + 1, false);
+                } else if (isResearchJournal(copy)) {
+                    movedToTable = moveItemStackTo(original, SLOT_JOURNAL, SLOT_JOURNAL + 1, false);
+                }
             }
 
-            // If it didn't go into the machine (either wasn't valid, or the machine slot was full),
-            // handle standard hotbar <-> inventory shift-clicking.
             if (!movedToTable) {
-                int hotbarStart = INPUT_SLOT_COUNT + 27;       // Index 30
-                int hotbarEnd = INPUT_SLOT_COUNT + 36;         // Index 39
+                int hotbarStart = INPUT_SLOT_COUNT + 27;
+                int hotbarEnd = INPUT_SLOT_COUNT + 36;
 
                 if (index < hotbarStart) {
-                    // Clicked in main inventory -> move to hotbar
                     if (!moveItemStackTo(original, hotbarStart, hotbarEnd, false)) return ItemStack.EMPTY;
                 } else if (index < hotbarEnd) {
-                    // Clicked in hotbar -> move to main inventory
                     if (!moveItemStackTo(original, INPUT_SLOT_COUNT, hotbarStart, false)) return ItemStack.EMPTY;
                 } else {
                     return ItemStack.EMPTY;
@@ -175,5 +218,32 @@ public class ModResearchMenu extends AbstractContainerMenu {
     @Override
     public boolean stillValid(@NotNull Player player) {
         return stillValid(access, player, ModBlocks.RESEARCH_TABLE.get());
+    }
+
+    private static class ConditionalSlot extends Slot {
+        private final java.util.function.Predicate<ItemStack> placeCheck;
+        private final BooleanSupplier active;
+
+        ConditionalSlot(Container container, int index, int x, int y,
+                        BooleanSupplier active, java.util.function.Predicate<ItemStack> placeCheck) {
+            super(container, index, x, y);
+            this.active = active;
+            this.placeCheck = placeCheck;
+        }
+
+        @Override
+        public boolean isActive() {
+            return active.getAsBoolean();
+        }
+
+        @Override
+        public boolean mayPlace(@NotNull ItemStack stack) {
+            return active.getAsBoolean() && placeCheck.test(stack);
+        }
+
+        @Override
+        public boolean mayPickup(@NotNull Player player) {
+            return active.getAsBoolean() && super.mayPickup(player);
+        }
     }
 }

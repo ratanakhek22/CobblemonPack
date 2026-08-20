@@ -14,4 +14,8 @@ public class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<RuinBlockEntity>> RUIN_BLOCK =
             BLOCK_ENTITIES.register("ruin_block",
                     () -> BlockEntityType.Builder.of(RuinBlockEntity::new, ModBlocks.RUIN_BLOCK.get()).build(null));
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ResearchTableBlockEntity>> RESEARCH_TABLE =
+            BLOCK_ENTITIES.register("research_table",
+                    () -> BlockEntityType.Builder.of(ResearchTableBlockEntity::new, ModBlocks.RESEARCH_TABLE.get()).build(null));
 }

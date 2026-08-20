@@ -181,4 +181,17 @@ public class ResearchPlayerData {
     public Map<ResourceLocation, Integer> getAllInvested() {
         return new HashMap<>(pointsInvested);
     }
+
+    public boolean creditInvestedFree(ResourceLocation speciesId, ResearchNodeDefinition def, int amount) {
+        if (amount <= 0) return false;
+        NodeProgress current = getProgress(speciesId);
+        if (current == def.finalProgress()) return false;
+
+        int newInvested = pointsInvested.merge(speciesId, amount, Integer::sum);
+        NodeProgress computed = def.progressForInvested(newInvested);
+        if (computed.ordinal() > current.ordinal()) {
+            progress.put(speciesId, computed);
+        }
+        return true;
+    }
 }

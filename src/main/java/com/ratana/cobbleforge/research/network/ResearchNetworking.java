@@ -1,5 +1,6 @@
 package com.ratana.cobbleforge.research.network;
 
+import com.ratana.cobbleforge.research.block.entity.ResearchTableBlockEntity;
 import com.ratana.cobbleforge.research.client.ClientResearchSync;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
@@ -39,25 +40,51 @@ public final class ResearchNetworking {
                 ResearchNetworking::handleAction);
         registrar.playToClient(ResearchSyncPayload.TYPE, ResearchSyncPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ClientResearchSync.apply(payload)));
+        registrar.playToServer(ResearchViewPayload.TYPE, ResearchViewPayload.STREAM_CODEC,
+                ResearchNetworking::handleViewChange);
+    }
+
+    private static void handleViewChange(ResearchViewPayload payload,
+                                         net.neoforged.neoforge.network.handling.IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer sp)) return;
+            if (sp.containerMenu instanceof com.ratana.cobbleforge.research.menu.ModResearchMenu menu) {
+                menu.setView(payload.redeemView()
+                        ? com.ratana.cobbleforge.research.menu.ModResearchMenu.MenuView.REDEEM
+                        : com.ratana.cobbleforge.research.menu.ModResearchMenu.MenuView.EXPLORE);
+            }
+        });
+    }
+
+    private static void handleForgottenKnowledge(ResearchPlayerData data, ResearchTableBlockEntity blockEntity,
+                                                 ResourceLocation nodeId, ResearchNodeDefinition def) {
+        if (blockEntity.forgottenKnowledgeCount() < 1) return;
+
+        int currentInvested = data.getPointsInvested(nodeId);
+        int remaining = def.remainingForNextStage(currentInvested);
+        if (remaining <= 0) return; // already fully unlocked, nothing to skip into
+
+        if (!data.creditInvestedFree(nodeId, def, remaining)) return;
+
+        blockEntity.removeItem(ResearchTableBlockEntity.SLOT_FORGOTTEN_KNOWLEDGE, 1);
     }
 
     private static void handleAction(ResearchActionPayload payload,
                                      net.neoforged.neoforge.network.handling.IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer sp)) return;
+            if (!(sp.containerMenu instanceof com.ratana.cobbleforge.research.menu.ModResearchMenu menu)) return;
 
-            // getDefinitions() is keyed by speciesId -- that's the node's only identity now.
+            ResearchTableBlockEntity blockEntity = menu.getBlockEntity();
+            if (blockEntity == null || !blockEntity.hasJournal()) return; // Journal gates all functions
+
             ResearchNodeDefinition def = getDefinitions().get(payload.nodeId());
-            if (def == null) return; // unknown node id, ignore silently
+            if (def == null) return;
 
             ResearchPlayerData data = getPlayerData(sp);
 
             switch (payload.action()) {
-                case SPEND_FORGOTTEN_KNOWLEDGE -> {
-                    // TODO: consume 1 Forgotten Knowledge from the menu's SLOT_FORGOTTEN_KNOWLEDGE
-                    // input slot (need the open ModResearchMenu instance for that, not just
-                    // player data), then advance one stage for free regardless of point cost.
-                }
+                case SPEND_FORGOTTEN_KNOWLEDGE -> handleForgottenKnowledge(data, blockEntity, payload.nodeId(), def);
                 case INVEST -> handleInvest(data, payload.nodeId(), def);
             }
 
