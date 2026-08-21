@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "cobbleforge:item/journal"
+    "layer0": "cobbleforge:item/research_journal"
   }
 }
