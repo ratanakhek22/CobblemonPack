@@ -20,4 +20,10 @@ public class ModBlocks {
                     () -> new ResearchTableBlock(Block.Properties.of()
                             .strength(3.5F)
                             .requiresCorrectToolForDrops()));
+
+    public static final DeferredBlock<AltarBlock> ALTAR =
+            BLOCKS.register("altar",
+                    () -> new AltarBlock(Block.Properties.of()
+                            .strength(5.0F, 1200.0F)
+                            .requiresCorrectToolForDrops()));
 }

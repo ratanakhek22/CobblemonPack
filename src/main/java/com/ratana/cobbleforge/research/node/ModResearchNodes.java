@@ -1,46 +1,43 @@
 package com.ratana.cobbleforge.research.node;
 
-import com.cobblemon.mod.common.api.events.CobblemonEvents;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class ModResearchNodes {
-    private static final Map<ResourceLocation, ResearchNodeDefinition> NODES = new HashMap<>();
+    private static Map<ResourceLocation, ResearchNodeDefinition> NODES = Map.of();
 
-    /** Call once during mod setup — populates the map. */
-    public static void bootstrap() {
-        // Shared-path legendaries: 3 stages, silhouette / reveal / sacrifice-info
-        registerShared("cobblemon:moltres");
-        registerShared("cobblemon:zapdos");
-        registerShared("cobblemon:articuno");
+    /** Called by ResearchNodeReloadListener every time datapacks (re)load -- including once
+     *  at server start, and again on /reload. Replaces the entire map atomically. */
+    public static void reload(Iterable<ResearchNodeReloadListener.Entry> entries) {
+        Map<ResourceLocation, ResearchNodeDefinition> built = new HashMap<>();
+        Map<Map<ResourceLocation, Integer>, List<ResourceLocation>> byRecipe = new HashMap<>();
 
-        // Flagship legendaries: 2 stages only, hands off to a bespoke chain afterward
-        registerBespoke("cobblemon:mewtwo");
+        for (ResearchNodeReloadListener.Entry entry : entries) {
+            var stages = entry.bespoke()
+                    ? List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL)
+                    : List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL, NodeStage.SACRIFICE_INFO);
+            ResearchNodeDefinition def = new ResearchNodeDefinition(
+                    entry.species(), stages, entry.totalCost(), entry.bespoke(), entry.requiredItems());
+            built.put(entry.species(), def);
 
-        registerShared("cobblemon:your_mom"); //test
-    }
+            if (!entry.bespoke()) {
+                Map<ResourceLocation, Integer> normalized = new HashMap<>();
+                for (var req : entry.requiredItems()) {
+                    normalized.merge(req.item(), req.count(), Integer::sum);
+                }
+                byRecipe.computeIfAbsent(normalized, k -> new ArrayList<>()).add(entry.species());
+            }
+        }
 
-    private static final int TOTAL_COST = 60; // placeholder — same for every legendary per your design doc
+        byRecipe.forEach((recipe, species) -> {
+            if (species.size() > 1) {
+                com.ratana.cobbleforge.CobbleForgeMod.LOGGER.error(
+                        "Duplicate altar recipe {} shared by multiple legendaries: {}", recipe, species);
+            }
+        });
 
-    private static void registerShared(String speciesId) {
-        register(speciesId,
-                List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL, NodeStage.SACRIFICE_INFO),
-                false);
-    }
-
-    private static void registerBespoke(String speciesId) {
-        register(speciesId,
-                List.of(NodeStage.SILHOUETTE, NodeStage.FULL_REVEAL),
-                true);
-    }
-
-    private static void register(String speciesId, List<NodeStage> stages, boolean bespoke) {
-        ResourceLocation id = ResourceLocation.parse(speciesId);
-        NODES.put(id, new ResearchNodeDefinition(id, stages, TOTAL_COST, bespoke));
+        NODES = Collections.unmodifiableMap(built);
     }
 
     public static ResearchNodeDefinition get(ResourceLocation speciesId) {
@@ -48,6 +45,6 @@ public class ModResearchNodes {
     }
 
     public static Map<ResourceLocation, ResearchNodeDefinition> all() {
-        return Collections.unmodifiableMap(NODES);
+        return NODES;
     }
 }

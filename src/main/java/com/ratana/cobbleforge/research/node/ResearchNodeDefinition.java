@@ -9,8 +9,17 @@ public record ResearchNodeDefinition(
         ResourceLocation speciesId,
         List<NodeStage> stages,      // ordered; e.g. [SILHOUETTE, FULL_REVEAL] for bespoke
         int totalCost,               // constant across all legendaries per your design doc
-        boolean bespoke
+        boolean bespoke,
+        List<RequiredItem> requiredItems
 ) {
+    public record RequiredItem(ResourceLocation item, int count) {
+        public static final com.mojang.serialization.Codec<RequiredItem> CODEC =
+                com.mojang.serialization.codecs.RecordCodecBuilder.create(instance -> instance.group(
+                        ResourceLocation.CODEC.fieldOf("item").forGetter(RequiredItem::item),
+                        com.mojang.serialization.Codec.INT.optionalFieldOf("count", 1).forGetter(RequiredItem::count)
+                ).apply(instance, RequiredItem::new));
+    }
+
     /** Points required to clear this specific stage's pay-wall, derived from the shared total. */
     public int costForStage(NodeStage stage) {
         int index = stages.indexOf(stage);

@@ -1,0 +1,9 @@
+{
+  "species": "cobblemon:moltres",
+  "bespoke": false,
+  "total_cost": 60,
+  "required_items": [
+    { "item": "minecraft:blaze_powder", "count": 4 },
+    { "item": "minecraft:magma_cream", "count": 2 }
+  ]
+}

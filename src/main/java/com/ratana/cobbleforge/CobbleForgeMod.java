@@ -50,6 +50,10 @@ public class CobbleForgeMod {
             "research_table", ModBlocks.RESEARCH_TABLE
     );
 
+    public static final DeferredItem<BlockItem> ALTAR_ITEM = ITEMS.registerSimpleBlockItem(
+            "altar", ModBlocks.ALTAR
+    );
+
     public static final DeferredItem<AncientItem> ANCIENT_GEODE = ITEMS.register(
             "ancient_geode",
             () -> new AncientItem(new Item.Properties().stacksTo(1), TypeGroup.STEEL_ROCK_GROUND)
@@ -85,6 +89,11 @@ public class CobbleForgeMod {
 
         modEventBus.addListener(this::commonSetup);
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
+        NeoForge.EVENT_BUS.addListener(this::onAddReloadListeners);
+    }
+
+    private void onAddReloadListeners(net.neoforged.neoforge.event.AddReloadListenerEvent event) {
+        event.addListener(new com.ratana.cobbleforge.research.node.ResearchNodeReloadListener());
     }
 
     private void onServerStarting(net.neoforged.neoforge.event.server.ServerStartingEvent event) {
@@ -92,7 +101,6 @@ public class CobbleForgeMod {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        ModResearchNodes.bootstrap();
         ResearchPointHooks.register();
     }
 }

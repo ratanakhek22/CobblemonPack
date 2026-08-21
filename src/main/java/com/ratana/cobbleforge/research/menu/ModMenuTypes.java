@@ -13,4 +13,8 @@ public class ModMenuTypes {
     public static final Supplier<MenuType<ModResearchMenu>> RESEARCH_TABLE =
             MENU_TYPES.register("research_table",
                     () -> new MenuType<>(ModResearchMenu::new, net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS));
+
+    public static final Supplier<MenuType<ModJournalMenu>> RESEARCH_JOURNAL =
+            MENU_TYPES.register("research_journal_menu",
+                    () -> new MenuType<>(ModJournalMenu::new, net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS));
 }
