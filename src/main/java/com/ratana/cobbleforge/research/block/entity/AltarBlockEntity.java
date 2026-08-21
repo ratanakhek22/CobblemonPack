@@ -1,6 +1,9 @@
 package com.ratana.cobbleforge.research.block.entity;
 
+import com.cobblemon.mod.common.CobblemonEntities;
 import com.ratana.cobbleforge.CobbleForgeMod;
+import com.ratana.cobbleforge.research.altar.LegendaryEncounterTracker;
+import com.ratana.cobbleforge.research.altar.LockedLegendaryData;
 import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.node.ResearchNodeDefinition;
 import com.ratana.cobbleforge.research.player.ModAttachments;
@@ -56,17 +59,11 @@ public class AltarBlockEntity extends BlockEntity {
         }
     }
 
-    /** ASSUMPTION: the detection box shape/size here is a first pass -- tune the inflate
-     *  values once you see it in-game relative to your actual altar model's top surface. */
     private void scanAndProcess(ServerLevel level, BlockPos pos) {
         AABB detectionBox = new AABB(pos).expandTowards(0, 1.5, 0).inflate(0.4, 0, 0.4);
         List<ItemEntity> items = level.getEntitiesOfClass(ItemEntity.class, detectionBox);
 
         for (ItemEntity itemEntity : items) {
-            // ASSUMPTION: ItemEntity#getThrower() returning a nullable UUID is the correct
-            // 1.21.1 API for "who dropped this" -- unset for anything not player-thrown
-            // (tree saplings, hopper output, loot drops). Verify on first compile; if the
-            // method name/signature differs, this is the one line to fix.
             Entity ownerEntity = itemEntity.getOwner();
             UUID thrower = ownerEntity != null ? ownerEntity.getUUID() : null;
             if (thrower == null) continue;
@@ -75,8 +72,7 @@ public class AltarBlockEntity extends BlockEntity {
                 committedThrower = thrower;
                 startTick = level.getGameTime();
             } else if (!committedThrower.equals(thrower)) {
-                // A second player's item landed mid-attempt -- immediate cancel per design.
-                itemEntity.discard(); // this interfering item is also consumed, not left behind
+                itemEntity.discard();
                 fail(level, pos);
                 return;
             }
@@ -93,7 +89,10 @@ public class AltarBlockEntity extends BlockEntity {
             accumulated.merge(itemId, count, Integer::sum);
             itemEntity.discard();
 
-            checkForMatch(level, pos, thrower);
+            if (checkForMatch(level, pos, thrower)) {
+                return; // stop processing the rest of this batch -- the altar just reset, and any
+                // remaining ItemEntity instances will be picked up fresh on the next tick
+            }
         }
     }
 
@@ -107,13 +106,14 @@ public class AltarBlockEntity extends BlockEntity {
         return false;
     }
 
-    private void checkForMatch(ServerLevel level, BlockPos pos, UUID thrower) {
+    private boolean checkForMatch(ServerLevel level, BlockPos pos, UUID thrower) {
         for (ResearchNodeDefinition def : candidateRecipes(level, thrower)) {
             if (normalized(def.requiredItems()).equals(accumulated)) {
                 summon(level, pos, thrower, def);
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     private List<ResearchNodeDefinition> candidateRecipes(ServerLevel level, UUID thrower) {
@@ -136,10 +136,29 @@ public class AltarBlockEntity extends BlockEntity {
     }
 
     private void summon(ServerLevel level, BlockPos pos, UUID thrower, ResearchNodeDefinition def) {
-        // TODO: replace with the real Cobblemon spawn call once verified (you mentioned an
-        // in-game command exists, so the underlying capability is confirmed real -- this is
-        // a placeholder so the rest of the state machine is fully testable in the meantime).
-        EntityType.CHICKEN.spawn(level, pos.above(), net.minecraft.world.entity.MobSpawnType.MOB_SUMMONED);
+        if (LockedLegendaryData.get(level).isLocked(def.speciesId())) {
+            fail(level, pos);
+            return;
+        }
+
+        com.cobblemon.mod.common.api.pokemon.PokemonProperties properties =
+                com.cobblemon.mod.common.api.pokemon.PokemonProperties.Companion.parse(def.speciesId().getPath());
+        com.cobblemon.mod.common.pokemon.Pokemon pokemon = properties.create();
+
+        com.cobblemon.mod.common.entity.pokemon.PokemonEntity entity =
+                new com.cobblemon.mod.common.entity.pokemon.PokemonEntity(
+                        level, pokemon, com.cobblemon.mod.common.CobblemonEntities.POKEMON);
+        entity.setPos(pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5);
+        entity.setPersistenceRequired();
+
+        // Tag the entity itself -- this is now the ONLY record of "this is a supervised
+        // encounter." No separate map to go stale or duplicate.
+        entity.getPersistentData().putString(LegendaryEncounterTracker.TAG_SPECIES, def.speciesId().toString());
+        entity.getPersistentData().putUUID(LegendaryEncounterTracker.TAG_SUMMONER, thrower);
+        entity.getPersistentData().putLong(LegendaryEncounterTracker.TAG_SPAWN_TICK, level.getGameTime());
+
+        level.addFreshEntity(entity);
+        LockedLegendaryData.get(level).lock(def.speciesId());
 
         level.playSound(null, pos, SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.0F, 1.0F);
         reset();

@@ -1,8 +1,13 @@
 package com.ratana.cobbleforge;
 
+import com.cobblemon.mod.common.api.events.CobblemonEvents;
+import com.ratana.cobbleforge.research.altar.LegendaryEncounterTracker;
+import com.ratana.cobbleforge.research.altar.LockedLegendaryData;
 import com.ratana.cobbleforge.research.item.AncientItem;
 import com.ratana.cobbleforge.research.node.TypeGroup;
 import com.ratana.cobbleforge.research.node.TypeGroupRegistry;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
@@ -90,6 +95,23 @@ public class CobbleForgeMod {
         modEventBus.addListener(this::commonSetup);
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
         NeoForge.EVENT_BUS.addListener(this::onAddReloadListeners);
+        NeoForge.EVENT_BUS.addListener(this::onServerTick);
+        NeoForge.EVENT_BUS.addListener(this::onLivingDeath);
+    }
+
+    private void onLivingDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        if (event.getEntity() instanceof com.cobblemon.mod.common.entity.pokemon.PokemonEntity pokemonEntity
+                && pokemonEntity.level() instanceof ServerLevel serverLevel) {
+            LegendaryEncounterTracker.onEntityDeath(pokemonEntity, serverLevel);
+        }
+    }
+
+    private int tickCounter = 0;
+    private void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (++tickCounter % 20 != 0) return; // matches the altar's own "every ~1 second" cadence
+        for (ServerLevel level : event.getServer().getAllLevels()) {
+            com.ratana.cobbleforge.research.altar.LegendaryEncounterTracker.tick(level);
+        }
     }
 
     private void onAddReloadListeners(net.neoforged.neoforge.event.AddReloadListenerEvent event) {
@@ -102,5 +124,25 @@ public class CobbleForgeMod {
 
     private void commonSetup(FMLCommonSetupEvent event) {
         ResearchPointHooks.register();
+
+        CobblemonEvents.POKEMON_CAPTURED.subscribe(
+                com.cobblemon.mod.common.api.Priority.NORMAL,
+                event1 -> {
+                    var entity = event1.getPokemon().getEntity();
+                    if (entity != null) {
+                        LegendaryEncounterTracker.onCaptured(entity.getUUID());
+                    }
+                    return kotlin.Unit.INSTANCE;
+                });
+
+        CobblemonEvents.POKEMON_RELEASED_EVENT_PRE.subscribe(
+                com.cobblemon.mod.common.api.Priority.NORMAL,
+                event1 -> {
+                    ResourceLocation species = event1.getPokemon().getSpecies().getResourceIdentifier();
+                    if (LockedLegendaryData.get((ServerLevel) event1.getPlayer().level()).isLocked(species)) {
+                        event1.cancel();
+                    }
+                    return kotlin.Unit.INSTANCE;
+                });
     }
 }
