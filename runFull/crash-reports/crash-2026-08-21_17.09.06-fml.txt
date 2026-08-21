@@ -1,0 +1,88 @@
+---- Minecraft Crash Report ----
+// Uh... Did I do that?
+
+Time: 2026-08-21 17:09:06
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Mod loading issue for: ars_nouveau --
+Details:
+	Mod file: /C:/Users/lakhe/Ratana/CobblemonPack/runFull/mods/ars_nouveau-1.21.1-5.13.0.jar
+	Failure message: Mod ars_nouveau requires geckolib 4.2.1 or above
+		Currently, geckolib is not installed
+		
+	Mod version: 5.13.0
+	Mod issues URL: https://github.com/baileyholl/Ars-Nouveau
+	Exception message: <No associated exception found>
+
+-- Mod loading issue for: ars_nouveau --
+Details:
+	Mod file: /C:/Users/lakhe/Ratana/CobblemonPack/runFull/mods/ars_nouveau-1.21.1-5.13.0.jar
+	Failure message: Mod ars_nouveau requires curios 1.19-5.0.7.1 or above
+		Currently, curios is not installed
+		
+	Mod version: 5.13.0
+	Mod issues URL: https://github.com/baileyholl/Ars-Nouveau
+	Exception message: <No associated exception found>
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Minecraft Version ID: 1.21.1
+	Operating System: Windows 11 (amd64) version 10.0
+	Java Version: 21.0.12, Microsoft
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Microsoft
+	Memory: 390405352 bytes (372 MiB) / 843055104 bytes (804 MiB) up to 4202692608 bytes (4008 MiB)
+	CPUs: 12
+	Processor Vendor: GenuineIntel
+	Processor Name: 12th Gen Intel(R) Core(TM) i7-1255U
+	Identifier: Intel64 Family 6 Model 154 Stepping 4
+	Microarchitecture: Alder Lake
+	Frequency (GHz): 2.61
+	Number of physical packages: 1
+	Number of physical CPUs: 10
+	Number of logical CPUs: 12
+	Graphics card #0 name: Intel(R) Iris(R) Xe Graphics
+	Graphics card #0 vendor: Intel Corporation
+	Graphics card #0 VRAM (MiB): 2048.00
+	Graphics card #0 deviceId: VideoController1
+	Graphics card #0 versionInfo: 32.0.101.7076
+	Memory slot #0 capacity (MiB): 8192.00
+	Memory slot #0 clockSpeed (GHz): 3.20
+	Memory slot #0 type: DDR4
+	Memory slot #1 capacity (MiB): 8192.00
+	Memory slot #1 clockSpeed (GHz): 3.20
+	Memory slot #1 type: DDR4
+	Virtual memory max (MiB): 17474.13
+	Virtual memory used (MiB): 14517.09
+	Swap memory total (MiB): 1446.45
+	Swap memory used (MiB): 810.03
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 325272.41, total: 487304.00
+	Space in storage for workdir (MiB): available: 325272.41, total: 487304.00
+	JVM Flags: 0 total; 
+	ModLauncher: 11.0.5+main.901c6ea8
+	ModLauncher launch target: forgeclientdev
+	ModLauncher services: 
+		sponge-mixin-0.15.2+mixin.0.8.7.jar mixin PLUGINSERVICE 
+		loader-4.0.43.jar slf4jfixer PLUGINSERVICE 
+		loader-4.0.43.jar runtime_enum_extender PLUGINSERVICE 
+		at-modlauncher-10.0.1.jar accesstransformer PLUGINSERVICE 
+		loader-4.0.43.jar runtimedistcleaner PLUGINSERVICE 
+		modlauncher-11.0.5.jar mixin TRANSFORMATIONSERVICE 
+		modlauncher-11.0.5.jar fml TRANSFORMATIONSERVICE 
+	FML Language Providers: 
+		kotlinforforge@5.8.0
+		javafml@4.0
+		lowcodefml@4.0
+		minecraft@4.0
+	Mod List: 
+		neoforge-21.1.248.jar                             |Minecraft                     |minecraft                     |1.21.1              |Manifest: NOSIGNATURE
+		neoforge-21.1.248.jar                             |NeoForge                      |neoforge                      |21.1.248            |Manifest: NOSIGNATURE
