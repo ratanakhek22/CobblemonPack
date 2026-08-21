@@ -54,6 +54,9 @@ public final class ResearchNetworking {
                 ResearchNetworking::handleViewChange);
         registrar.playToServer(ResearchRedeemPayload.TYPE, ResearchRedeemPayload.STREAM_CODEC,
                 ResearchNetworking::handleRedeem);
+        registrar.playToClient(ResearchNodeSyncPayload.TYPE, ResearchNodeSyncPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        com.ratana.cobbleforge.research.node.ModResearchNodes.reload(payload.nodes())));
     }
 
     private static void handleRedeem(ResearchRedeemPayload payload,

@@ -4,15 +4,17 @@ import com.cobblemon.mod.common.api.events.CobblemonEvents;
 import com.ratana.cobbleforge.research.altar.LegendaryEncounterTracker;
 import com.ratana.cobbleforge.research.altar.LockedLegendaryData;
 import com.ratana.cobbleforge.research.item.AncientItem;
-import com.ratana.cobbleforge.research.node.TypeGroup;
-import com.ratana.cobbleforge.research.node.TypeGroupRegistry;
+import com.ratana.cobbleforge.research.network.ResearchNodeSyncPayload;
+import com.ratana.cobbleforge.research.node.*;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
@@ -25,11 +27,12 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import com.ratana.cobbleforge.research.block.ModBlocks;
 import com.ratana.cobbleforge.research.block.entity.ModBlockEntities;
 import com.ratana.cobbleforge.research.player.ModAttachments;
-import com.ratana.cobbleforge.research.node.ModResearchNodes;
 import com.ratana.cobbleforge.research.player.ResearchPointHooks;
 import com.ratana.cobbleforge.research.item.ForgottenKnowledge;
 import com.ratana.cobbleforge.research.item.ResearchJournal;
 import com.ratana.cobbleforge.research.menu.ModMenuTypes;
+
+import java.util.List;
 
 @Mod(CobbleForgeMod.MOD_ID)
 public class CobbleForgeMod {
@@ -93,10 +96,18 @@ public class CobbleForgeMod {
         ModMenuTypes.MENU_TYPES.register(modEventBus);
 
         modEventBus.addListener(this::commonSetup);
+        NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(this::onServerStarting);
         NeoForge.EVENT_BUS.addListener(this::onAddReloadListeners);
         NeoForge.EVENT_BUS.addListener(this::onServerTick);
         NeoForge.EVENT_BUS.addListener(this::onLivingDeath);
+    }
+
+    private void onPlayerLoggedIn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer sp) {
+            List<ResearchNodeDefinition> defs = List.copyOf(ModResearchNodes.all().values());
+            PacketDistributor.sendToPlayer(sp, new ResearchNodeSyncPayload(defs));
+        }
     }
 
     private void onLivingDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {

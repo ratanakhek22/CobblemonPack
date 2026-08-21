@@ -18,6 +18,13 @@ public record ResearchNodeDefinition(
                         ResourceLocation.CODEC.fieldOf("item").forGetter(RequiredItem::item),
                         com.mojang.serialization.Codec.INT.optionalFieldOf("count", 1).forGetter(RequiredItem::count)
                 ).apply(instance, RequiredItem::new));
+
+        public static final net.minecraft.network.codec.StreamCodec<net.minecraft.network.RegistryFriendlyByteBuf, RequiredItem> STREAM_CODEC =
+                net.minecraft.network.codec.StreamCodec.composite(
+                        ResourceLocation.STREAM_CODEC, RequiredItem::item,
+                        net.minecraft.network.codec.ByteBufCodecs.VAR_INT, RequiredItem::count,
+                        RequiredItem::new
+                );
     }
 
     /** Points required to clear this specific stage's pay-wall, derived from the shared total. */

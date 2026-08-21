@@ -40,6 +40,14 @@ public class ModResearchNodes {
         NODES = Collections.unmodifiableMap(built);
     }
 
+    public static void reload(List<ResearchNodeDefinition> definitions) {
+        Map<ResourceLocation, ResearchNodeDefinition> built = new HashMap<>();
+        for (ResearchNodeDefinition def : definitions) {
+            built.put(def.speciesId(), def);
+        }
+        NODES = Collections.unmodifiableMap(built);
+    }
+
     public static ResearchNodeDefinition get(ResourceLocation speciesId) {
         return NODES.get(speciesId);
     }
