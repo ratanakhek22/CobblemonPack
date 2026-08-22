@@ -1,0 +1,7 @@
+[purseHud]
+	# Default: 129
+	# Range: 0 ~ 1000
+	pursePositionX = 129
+	# Default: 20
+	# Range: 0 ~ 2000
+	pursePositionY = 20

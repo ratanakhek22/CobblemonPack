@@ -1,0 +1,37 @@
+[deathPenalty]
+	#% of purse dropped on death in Peaceful (default 0)
+	# Default: 0.0
+	# Range: 0.0 ~ 100.0
+	peaceful = 0.0
+	#% of purse dropped on death in Easy (default 25)
+	# Default: 25.0
+	# Range: 0.0 ~ 100.0
+	easy = 25.0
+	#% of purse dropped on death in Normal (default 50)
+	# Default: 50.0
+	# Range: 0.0 ~ 100.0
+	normal = 50.0
+	#% of purse dropped on death in Hard (default 75)
+	# Default: 75.0
+	# Range: 0.0 ~ 100.0
+	hard = 75.0
+
+[trading]
+	#When enabled, emerald prices on trades added by other mods (including VillagerAPI custom professions) are automatically converted to coin equivalents. Disable if you are using a separate economy mod that should keep its own emerald prices.
+	wrapModTrades = true
+	#Allow paying with a higher denomination coin and receiving change back. E.g. pay 1 silver on a 50 bronze trade and get 50 bronze change.
+	enableDenominationExchange = true
+	#Automatically fill trade payment slots from the purse. When the exact coin count would exceed the 99-stack limit, a higher denomination is used automatically.
+	enableSmartAutofill = true
+	#Show an action bar message whenever the purse balance changes (e.g. after a trade or picking up coins).
+	showCurrencyActionBar = true
+
+[economy]
+	#Maximum value (in bronze) the purse can hold. -1 = unlimited (default). Example: 9999999 = 999 gold, 99 silver, 99 bronze.
+	# Default: -1
+	# Range: -1 ~ 9223372036854775807
+	maxPurseValue = -1
+
+[loot]
+	#Structures that have coins, specific rates can be changed via datapacks.
+	structures = ["minecraft:chests/stronghold_library", "minecraft:chests/bastion_treasure", "minecraft:chests/stronghold_corridor", "minecraft:chests/pillager_outpost", "minecraft:chests/buried_treasure", "minecraft:chests/simple_dungeon", "minecraft:chests/abandoned_mineshaft"]
