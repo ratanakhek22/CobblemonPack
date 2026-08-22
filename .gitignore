@@ -41,3 +41,5 @@ repo/
 !**/src/**/repo/
 run2/
 !**/src/**/run2/
+runFull
+!**/src/**/runFull/
