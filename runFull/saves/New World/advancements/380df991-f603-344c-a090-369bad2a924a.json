@@ -269,12 +269,6 @@
     },
     "done": true
   },
-  "minecraft:recipes/decorations/crafting_table": {
-    "criteria": {
-      "unlock_right_away": "2026-08-21 22:20:34 -0500"
-    },
-    "done": true
-  },
   "ars_nouveau:recipes/misc/sourcestone": {
     "criteria": {
       "has_journal": "2026-08-21 22:20:33 -0500"
@@ -623,21 +617,9 @@
     },
     "done": true
   },
-  "ars_nouveau:alteration_table": {
-    "criteria": {
-      "has_alteration_table": "2026-08-21 22:21:42 -0500"
-    },
-    "done": true
-  },
   "ars_nouveau:recipes/misc/ritual_forestation": {
     "criteria": {
       "has_journal": "2026-08-21 22:20:33 -0500"
-    },
-    "done": true
-  },
-  "dungeons_arise:wda_root": {
-    "criteria": {
-      "WDA": "2026-08-21 22:20:34 -0500"
     },
     "done": true
   },
@@ -1851,6 +1833,24 @@
   "ars_nouveau:recipes/misc/smooth_gilded_sourcestone_mosaic_to_sourcestone": {
     "criteria": {
       "has_journal": "2026-08-21 22:20:33 -0500"
+    },
+    "done": true
+  },
+  "minecraft:recipes/decorations/crafting_table": {
+    "criteria": {
+      "unlock_right_away": "2026-08-21 22:20:34 -0500"
+    },
+    "done": true
+  },
+  "dungeons_arise:wda_root": {
+    "criteria": {
+      "WDA": "2026-08-21 22:20:34 -0500"
+    },
+    "done": true
+  },
+  "ars_nouveau:alteration_table": {
+    "criteria": {
+      "has_alteration_table": "2026-08-21 22:21:42 -0500"
     },
     "done": true
   },

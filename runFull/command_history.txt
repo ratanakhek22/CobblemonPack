@@ -20,3 +20,6 @@
 /research points 300
 /give @a ars_nouveau:alteration_table
 /give @a cobbleforge:research_table
+/spawnnpc
+/spawnnpc standard
+/give @a cobblemon:npc_editor
