@@ -100,7 +100,7 @@ configurations {
 }
 
 dependencies {
-    implementation "thedarkcolour:kotlinforforge-neoforge:5.8.0"
+    implementation "thedarkcolour:kotlinforforge-neoforge:5.10.0"
     implementation "maven.modrinth:MdwFAVRL:S1TrAn8c"
 }
 

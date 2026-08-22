@@ -16,3 +16,7 @@
 /gamemode spectator
 /gamemode survival
 /spawnpokemon lokix
+/give @a cobbleforge:research_journal
+/research points 300
+/give @a ars_nouveau:alteration_table
+/give @a cobbleforge:research_table

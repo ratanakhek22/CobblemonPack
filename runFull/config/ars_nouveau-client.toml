@@ -1,7 +1,7 @@
 #Lighting
 [lights]
 	#Show the supporter message. This is set to false after the first time.
-	showSupporterMessage = true
+	showSupporterMessage = false
 	#If dynamic lights are enabled
 	lightsEnabled = false
 	#How bright the touch light is
@@ -50,7 +50,7 @@
 	#If scrolling in the Storage Lectern should be inverted
 	invertLecternScrolling = false
 	#Inform the player of Dynamic lights once.
-	informLights = true
+	informLights = false
 	#Whether the Selection HUD is toggled or held
 	toggleSelectionHUD = true
 
